@@ -28,6 +28,7 @@
     <Compile Include="core\realtime_handler.py" />
     <Compile Include="test_historical.py" />
     <Compile Include="test_realtime.py" />
+    <Compile Include="test_symbols.py" />
     <Compile Include="Traiding_Bot.py" />
     <Compile Include="core\__init__.py" />
   </ItemGroup>
