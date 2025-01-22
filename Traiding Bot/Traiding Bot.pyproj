@@ -26,7 +26,9 @@
     <Compile Include="core\hist_data_loader.py" />
     <Compile Include="core\historical_context.py" />
     <Compile Include="core\realtime_handler.py" />
+    <Compile Include="test_connection.py" />
     <Compile Include="test_historical.py" />
+    <Compile Include="test_network.py" />
     <Compile Include="test_realtime.py" />
     <Compile Include="test_symbols.py" />
     <Compile Include="Traiding_Bot.py" />
