@@ -1,0 +1,37 @@
+{
+  "model_type": "lstm",
+  "trial_number": 62,
+  "epoch": 0,
+  "hpo_run_id": null,
+  "hyperparameters": {
+    "learning_rate": 5.742762779800407e-05,
+    "batch_size": 128,
+    "weight_decay": 1.3242860622144402e-06,
+    "dropout_rate": 0.16208048169431025,
+    "focal_alpha": 0.8733013094908448,
+    "focal_gamma": 0.8533911013856688,
+    "scheduler_factor": 0.38872609758264776,
+    "scheduler_patience": 2,
+    "gradient_clip_norm": 1.2078462481865948,
+    "early_stopping_patience": 8,
+    "lstm_hidden_dim": 202,
+    "lstm_num_layers": 1,
+    "attention_dim": 32,
+    "asset_embedding_dim": 17,
+    "use_layer_norm": false
+  },
+  "validation_metrics": {
+    "f1": 0.3286703096539162,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "test_metrics": {
+    "f1": null,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "checkpoint_date": "2025-10-05",
+  "notes": "Copied from models/hpo_derived/HPO_GRU_Production_lstm/BEST_epoch000_lstm_f10.3172_20251003_131654.pt (only best-epoch artifact available)."
+}

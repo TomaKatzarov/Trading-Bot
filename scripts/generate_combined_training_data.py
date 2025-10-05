@@ -79,9 +79,11 @@ def create_training_config(symbols_list: Optional[List[str]] = None) -> Dict[str
         ],
         'nan_handling_features': 'ffill',
         'lookback_window': 24,
-        'prediction_horizon_hours': 8,
-        'profit_target': 0.025,  # 2.5%
-        'stop_loss': 0.02,      # 2%
+    'prediction_horizon_hours': 24,
+    'prediction_horizon': 24,
+        'profit_target': 0.015,  # 1.5%
+        'stop_loss': 0.03,      # 3%
+        'stop_loss_target': 0.03,
         'train_ratio': 0.70,
         'val_ratio': 0.15,
         'test_ratio': 0.15,
@@ -142,6 +144,9 @@ def save_training_data(data_splits: Dict[str, Any], output_dir: str = "data/trai
         'symbols_processed': data_splits.get('symbols_processed', []),
         'feature_count': data_splits['train']['X'].shape[2] if 'train' in data_splits else 0,
         'lookback_window': data_splits.get('lookback_window', 24),
+        'prediction_horizon_hours': data_splits.get('prediction_horizon_hours', 24),
+        'profit_target': data_splits.get('profit_target'),
+        'stop_loss': data_splits.get('stop_loss'),
         'total_sequences': sum(data_splits[split]['X'].shape[0] for split in splits_to_save if split in data_splits),
         'train_samples': data_splits['train']['X'].shape[0] if 'train' in data_splits else 0,
         'val_samples': data_splits['val']['X'].shape[0] if 'val' in data_splits else 0,
@@ -222,13 +227,21 @@ def main():
     parser.add_argument('--symbols', type=str, help='Path to symbols JSON file')
     parser.add_argument('--output-dir', type=str, default='data/training_data', help='Output directory for training data')
     parser.add_argument('--lookback-window', type=int, default=24, help='Lookback window size')
-    parser.add_argument('--profit-target', type=float, default=0.025, help='Profit target (e.g., 0.025 for 2.5%)')
-    parser.add_argument('--stop-loss', type=float, default=0.02, help='Stop loss (e.g., 0.02 for 2%)')
+    parser.add_argument('--prediction-horizon', type=int, default=24, help='Prediction horizon in hours')
+    parser.add_argument('--profit-target', type=float, default=0.015, help='Profit target (e.g., 0.015 for 1.5%)')
+    parser.add_argument('--stop-loss', type=float, default=0.03, help='Stop loss (e.g., 0.03 for 3%)')
     args = parser.parse_args()
     
     logger.info("=" * 80)
     logger.info("GENERATING COMBINED TRAINING DATA")
-    logger.info(f"Output dir: {args.output_dir}, Profit target: {args.profit_target}, Lookback: {args.lookback_window}")
+    logger.info(
+        "Output dir: %s, Profit target: %.3f, Stop loss: %.3f, Lookback: %d, Horizon: %d",
+        args.output_dir,
+        args.profit_target,
+        args.stop_loss,
+        args.lookback_window,
+        args.prediction_horizon,
+    )
     logger.info("=" * 80)
     
     # Get available symbols or from file
@@ -261,8 +274,11 @@ def main():
     # Create configuration
     config = create_training_config(available_symbols)
     config['lookback_window'] = args.lookback_window
+    config['prediction_horizon_hours'] = args.prediction_horizon
+    config['prediction_horizon'] = args.prediction_horizon
     config['profit_target'] = args.profit_target
     config['stop_loss'] = args.stop_loss
+    config['stop_loss_target'] = args.stop_loss
     
     # Initialize data preparer
     logger.info("Initializing NNDataPreparer...")
@@ -272,10 +288,14 @@ def main():
     logger.info("Generating combined training data...")
     try:
         data_splits = data_preparer.get_prepared_data_for_training()
-        
+
         # Add symbols processed to the results
         data_splits['symbols_processed'] = available_symbols
         data_splits['lookback_window'] = config['lookback_window']
+        data_splits['prediction_horizon_hours'] = config['prediction_horizon_hours']
+        data_splits['prediction_horizon'] = config['prediction_horizon']
+        data_splits['profit_target'] = config['profit_target']
+        data_splits['stop_loss'] = config['stop_loss']
         
         # Save the data
         logger.info("Saving training data...")
@@ -289,11 +309,13 @@ def main():
         logger.info(f"Total sequences: {sum(data_splits[split]['X'].shape[0] for split in ['train', 'val', 'test'])}")
         logger.info(f"Features per sequence: {data_splits['train']['X'].shape[2]}")
         logger.info(f"Lookback window: {config['lookback_window']} hours")
+        logger.info(f"Prediction horizon: {config['prediction_horizon_hours']} hours")
+        logger.info(f"Profit target: {config['profit_target']:.3f}, Stop loss: {config['stop_loss']:.3f}")
         logger.info(f"Train samples: {data_splits['train']['X'].shape[0]}")
         logger.info(f"Val samples: {data_splits['val']['X'].shape[0]}")
         logger.info(f"Test samples: {data_splits['test']['X'].shape[0]}")
         logger.info(f"Positive ratio - Train: {np.mean(data_splits['train']['y']):.3f}, Val: {np.mean(data_splits['val']['y']):.3f}, Test: {np.mean(data_splits['test']['y']):.3f}")
-        logger.info("Data saved to: data/training_data/")
+        logger.info(f"Data saved to: {args.output_dir}")
         logger.info("=" * 80)
         
     except Exception as e:

@@ -1,0 +1,37 @@
+{
+  "model_type": "gru",
+  "trial_number": 93,
+  "epoch": 0,
+  "hpo_run_id": null,
+  "hyperparameters": {
+    "learning_rate": 0.00032195235589938616,
+    "batch_size": 128,
+    "weight_decay": 0.00037077231289477525,
+    "dropout_rate": 0.3181755818276266,
+    "focal_alpha": 0.8819695461894077,
+    "focal_gamma": 1.5504037313742167,
+    "scheduler_factor": 0.46946701434390703,
+    "scheduler_patience": 5,
+    "gradient_clip_norm": 1.2776184710190244,
+    "early_stopping_patience": 3,
+    "gru_hidden_dim": 39,
+    "gru_num_layers": 1,
+    "attention_dim": 61,
+    "asset_embedding_dim": 4,
+    "use_layer_norm": true
+  },
+  "validation_metrics": {
+    "f1": 0.3339137081705453,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "test_metrics": {
+    "f1": null,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "checkpoint_date": "2025-10-05",
+  "notes": "Copied from models/hpo_derived/HPO_GRU_Production_gru/BEST_epoch000_gru_f10.3234_20251003_224506.pt (best-epoch artifact available)."
+}

@@ -108,6 +108,20 @@ hpo_studies/
 *.pth
 *.ckpt
 
+# RL Training Artifacts
+training/rl/checkpoints/**/*.pt
+training/rl/checkpoints/**/*.pkl
+training/rl/logs/
+training/rl/results/**/*.json
+
+# Tensorboard
+**/tb_logs/
+**/runs/
+
+# Ray
+~/ray_results/
+**/ray_results/
+
 # Database files
 *.db
 *.sqlite

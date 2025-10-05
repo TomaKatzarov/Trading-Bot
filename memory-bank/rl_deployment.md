@@ -1,7 +1,7 @@
 # Multi-Agent RL Deployment Guide
 
 **Document Version:** 1.0  
-**Date:** 2025-10-04  
+**Date:** 2025-10-05  
 **Status:** Draft for Production Planning (Phase 5)
 
 ## Overview
@@ -14,6 +14,8 @@ This guide outlines the procedures, infrastructure, and operational safeguards r
 - **Deterministic Reproducibility:** Ensure that production policies are versioned, checksum-verified, and reproducible from source artifacts.
 - **Operational Safety:** Enforce strict risk guardrails and automated kill switches across all layers.
 - **Observability:** Provide full-stack telemetry from data ingestion to trade execution and post-trade analytics.
+
+Baseline SL checkpoint benchmarks (`reports/sl_inference_benchmarks.json`) demonstrate 0.00024–0.0017 ms/sample inference on RTX 5070 Ti, establishing a latency budget for RL-serving components.
 
 ## System Architecture
 

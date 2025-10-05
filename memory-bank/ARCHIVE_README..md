@@ -124,12 +124,12 @@ Successfully consolidated 31+ individual memory-bank documents into 5 comprehens
 - Complete 23-feature list with descriptions
 - Data collection procedures (Alpaca API, FinBERT)
 - NNDataPreparer class methods and usage
-- Label generation algorithm (profit target +5%, stop loss -2%)
+- Label generation algorithm (historical +5%/-2%, updated Oct 2025 to +1.5%/-3% with 24h horizon)
 - Temporal splitting methodology
 - Feature scaling (StandardScaler, train-only fit)
 - Class imbalance handling (Focal Loss, sample weighting)
-- Production dataset statistics (878,740 sequences)
-- Phase 3 enhancement history (50→143 symbols, 0.6%→6.9% positive class)
+- Production dataset statistics (now 1,881,363 sequences, 24.3% positives)
+- Phase 3 enhancement history (50→143 symbols, 0.6%→6.9% positive class) plus October 2025 refresh to 160 symbols and 24.3% positives
 
 ---
 
@@ -376,14 +376,13 @@ Each consolidated document includes:
 ### Critical Information Verified
 
 **Technical Specifications:**
-- ✅ 143 symbols
+- ✅ 160 symbols processed (October 2025 refresh; historical Phase 3 used 143)
 - ✅ 23 features (complete list)
 - ✅ 24-hour lookback window
-- ✅ 8-hour prediction horizon
-- ✅ +2.5% profit target, -2% stop loss
-- ✅ 878,740 training sequences
-- ✅ 70/15/15 train/val/test split
-- ✅ 6.9% positive class ratio
+- ✅ 24-hour prediction horizon (updated from 8h)
+- ✅ +1.5% profit target, −3% stop loss (updated from +2.5%/−2%)
+- ✅ 1,881,363 training sequences (70/15/15 split: 1,316,954 / 282,204 / 282,205)
+- ✅ 24.3% positive class ratio overall (train 24.2%, val 26.9%, test 22.6%)
 
 **Model Performance:**
 - ✅ MLP Trial 72: F1+ 0.306, Recall 0.415, Test ROC-AUC 0.866

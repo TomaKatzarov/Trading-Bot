@@ -1,0 +1,10 @@
+{
+  "generation_timestamp": "2025-09-30T19:38:04.507947",
+  "train_samples": 609927,
+  "val_samples": 130699,
+  "test_samples": 130699,
+  "n_features": 15,
+  "lookback_window": 24,
+  "num_assets": 162,
+  "has_sample_weights": true
+}

@@ -42,10 +42,11 @@ graph LR
 
 ### Key Characteristics
 
-- **Multi-Symbol:** 143 tradable symbols (stocks, ETFs, crypto)
+- **Multi-Symbol:** 160 tradable symbols (stocks, ETFs, crypto)
 - **Temporal Resolution:** 1-hour bars
 - **Lookback Window:** 24 hours (configurable)
-- **Prediction Horizon:** 8 hours forward
+- **Prediction Horizon:** 24 hours forward
+- **Profit / Risk Targets:** +1.5% profit target, −3.0% stop loss (configurable)
 - **Feature Count:** 23 features per timestep
 - **Label Type:** Binary classification (profitable opportunity vs. none)
 - **Data Format:** NumPy arrays for training, Parquet for storage
@@ -97,7 +98,7 @@ graph LR
 - **DayOfWeek_cos** - Cyclical day of week (cos component)
 
 #### Sentiment Feature (1)
-- **sentiment_score** - FinBERT-derived sentiment [0, 1]
+- **sentiment_score_hourly_ffill** - FinBERT-derived sentiment score forward-filled to hourly cadence
 
 ### Feature Engineering Details
 
@@ -131,7 +132,7 @@ df['DayOfWeek_cos'] = np.cos(2 * np.pi * day_of_week / 7)
 - Bar interval: 1 hour
 - Approximately 4,380 bars per symbol (365 days × 6 hours/day × 2 years)
 
-**Symbol Universe:** 143 symbols
+**Symbol Universe:** 160 symbols
 
 **Categories:**
 - **Large-Cap Stocks:** AAPL, MSFT, GOOGL, AMZN, NVDA, etc.
@@ -209,24 +210,23 @@ The `NNDataPreparer` class orchestrates the complete data preparation workflow.
 from core.data_preparation_nn import NNDataPreparer
 
 config = {
-    'symbols': ['AAPL', 'MSFT', 'GOOGL'],  # Or 'all' for 143 symbols
+    'symbols': ['AAPL', 'MSFT', 'GOOGL'],  # Or 'all' for the 160-symbol universe
     'lookback_window': 24,
-    'prediction_horizon': 8,
-    'profit_target': 0.05,  # 5%
-    'stop_loss': 0.02,      # 2%
+    'prediction_horizon_hours': 24,
+    'profit_target': 0.015,       # +1.5% take-profit
+    'stop_loss_target': 0.03,     # −3.0% stop-loss guardrail
     'train_ratio': 0.70,
     'val_ratio': 0.15,
     'test_ratio': 0.15,
     'shuffle_before_split': False,  # Temporal split
-    'balance_classes': True,
-    'max_class_ratio': 3.0,
+    'balance_classes': False,       # Imbalance now moderate (~24% positives)
     'features': [
         'open', 'high', 'low', 'close', 'volume', 'vwap',
         'SMA_10', 'SMA_20', 'MACD_line', 'MACD_signal', 'MACD_hist',
         'RSI_14', 'Stoch_K', 'Stoch_D', 'ADX_14',
         'ATR_14', 'BB_bandwidth', 'OBV', 'Volume_SMA_20', '1h_return',
         'DayOfWeek_sin', 'DayOfWeek_cos',
-        'sentiment_score'
+        'sentiment_score_hourly_ffill'
     ]
 }
 
@@ -360,63 +360,59 @@ Generate binary labels indicating whether a profitable trading opportunity exist
 ### Algorithm
 
 ```python
-def generate_labels(df, prediction_horizon=8, profit_target=0.05, stop_loss=0.02):
+def generate_labels(df, prediction_horizon=24, profit_target=0.015, stop_loss=0.03):
     """
-    For each bar, look forward `prediction_horizon` bars and determine if:
-    1. Price reaches profit_target (+5%) before stop_loss (-2%)
-    2. No stop_loss is triggered
-    
-    Label = 1 (BUY signal) if profitable opportunity exists
+    For each bar, look forward `prediction_horizon` hours and determine if:
+    1. Price reaches profit_target (+1.5%) before stop_loss (−3.0%)
+    2. Price does NOT hit the stop first
+
+    Label = 1 (BUY signal) if the profit target is hit safely
     Label = 0 (HOLD) otherwise
     """
     labels = []
-    
+
     for i in range(len(df) - prediction_horizon):
         entry_price = df.iloc[i]['close']
         future_window = df.iloc[i+1:i+1+prediction_horizon]
-        
-        # Calculate max price and min price in forward window
+
         max_price = future_window['high'].max()
         min_price = future_window['low'].min()
-        
-        # Calculate potential profit and loss
+
         max_return = (max_price - entry_price) / entry_price
         min_return = (min_price - entry_price) / entry_price
-        
-        # Determine if profitable opportunity
+
         if max_return >= profit_target and min_return > -stop_loss:
-            labels.append(1)  # Profitable opportunity
+            labels.append(1)
         else:
-            labels.append(0)  # Not profitable or too risky
-    
-    # Last prediction_horizon bars cannot have labels (no future data)
+            labels.append(0)
+
     labels.extend([0] * prediction_horizon)
-    
+
     return labels
 ```
 
 ### Key Parameters
 
-**Current Production Configuration:**
-- **Profit Target:** +5.0% (reverted from +2.5% experimental value)
-- **Stop Loss:** -2.0%
-- **Prediction Horizon:** 8 hours
+**Current Production Configuration (October 2025 refresh):**
+- **Profit Target:** +1.5%
+- **Stop Loss:** −3.0%
+- **Prediction Horizon:** 24 hours forward
 
 **Historical Configurations:**
-- Phase 1-2: +2.5% profit, -2% stop
-- Phase 3: Experimented with +5%, reverted due to extreme imbalance
-- Current: +5% profit, -2% stop (matches baseline)
+- Phase 1-2: +2.5% profit, −2% stop, 8-hour horizon (too sparse)
+- Phase 3 baseline: +5% profit, −2% stop, 8-hour horizon (6.9% positives)
+- October 2025 remediation: +1.5% profit, −3% stop, 24-hour horizon (23-27% positives across splits)
 
 ### Label Distribution
 
-**Production Dataset (878,740 sequences):**
-- Positive class (label=1): 6.9% (~60,600 sequences)
-- Negative class (label=0): 93.1% (~818,140 sequences)
+**Current Dataset (October 2025 run, 1,881,363 sequences):**
+- Positive class (label=1): 24.3% (~457,700 sequences)
+- Negative class (label=0): 75.7% (~1,423,600 sequences)
 
-**Historical Distributions:**
+**Historical Distributions (for context):**
 - Phase 1: 0.6% positive (too rare, insufficient signal)
 - Phase 2: 3.2% positive (improved but still challenging)
-- Phase 3: 6.9% positive (current production level)
+- Phase 3 baseline (pre-refresh): 6.9% positive (8-hour, +5% strategy)
 
 ### Rationale
 
@@ -520,7 +516,7 @@ X_new_scaled = scaler.transform(X_new)
 ## 7. Class Imbalance Handling
 
 ### Problem
-Positive class (profitable opportunities) represents only ~6.9% of total sequences, leading to models that predict negative class predominantly.
+Positive class (profitable opportunities) historically ranged from 0.6% to 6.9%, which caused extreme imbalance. The October 2025 refresh lifts the positive rate to ~24%, easing—but not eliminating—the imbalance challenge.
 
 ### Solutions Implemented
 
@@ -542,15 +538,15 @@ class_weights = compute_class_weight(
 sample_weights = np.array([class_weights[int(label)] for label in y_train])
 ```
 
-**Result:**
-- Positive class weight: ~14.5 (1 / 0.069)
-- Negative class weight: ~1.07 (1 / 0.931)
+**Result (current dataset):**
+- Positive class weight: ~2.06 (1 / 0.243 × 0.5)
+- Negative class weight: ~0.66 (1 / 0.757 × 0.5)
 
-**Integration:** Weights provided to loss function during training
+**Integration:** Weights provided to loss functions on demand (optional now that imbalance is milder)
 
 #### 2. Focal Loss
 
-**Purpose:** Down-weight easy negatives, focus on hard positives
+**Purpose:** Down-weight easy negatives, focus on hard positives—especially for symbols that remain imbalanced
 
 **Implementation:** See [Training Documentation](#3-neural-network-models--training)
 
@@ -565,8 +561,8 @@ sample_weights = np.array([class_weights[int(label)] for label in y_train])
 **Configuration:**
 ```python
 config = {
-    'balance_classes': True,
-    'max_class_ratio': 3.0  # Max 3:1 negative:positive
+    'balance_classes': True,         # Optional: enable only if positives collapse for a subset
+    'max_class_ratio': 3.0           # Max 3:1 negative:positive
 }
 ```
 
@@ -588,30 +584,30 @@ config = {
 
 **Location:** `data/training_data_v2_final/`
 
-**Creation Date:** September 2025 (Phase 3 completion)
+**Creation Date:** October 5, 2025 (Post-imbalance remediation refresh)
 
 **Statistics:**
-- **Total Sequences:** 878,740
-- **Train Sequences:** 615,118 (70%)
-- **Val Sequences:** 131,811 (15%)
-- **Test Sequences:** 131,811 (15%)
-- **Symbols:** 143
+- **Total Sequences:** 1,881,363
+- **Train Sequences:** 1,316,954 (70.0%)
+- **Val Sequences:** 282,204 (15.0%)
+- **Test Sequences:** 282,205 (15.0%)
+- **Symbols:** 160
 - **Lookback Window:** 24 hours
 - **Features:** 23
-- **Positive Class:** 6.9% (~60,600 sequences)
+- **Positive Class:** 24.3% overall (train 24.2%, val 26.9%, test 22.6%)
 
 **Files:**
 ```
 training_data_v2_final/
-├── train_X.npy          # (615118, 24, 23) - Training sequences
-├── train_y.npy          # (615118,) - Training labels
-├── train_asset_ids.npy  # (615118,) - Training symbol IDs
-├── val_X.npy            # (131811, 24, 23) - Validation sequences
-├── val_y.npy            # (131811,) - Validation labels
-├── val_asset_ids.npy    # (131811,) - Validation symbol IDs
-├── test_X.npy           # (131811, 24, 23) - Test sequences
-├── test_y.npy           # (131811,) - Test labels
-├── test_asset_ids.npy   # (131811,) - Test symbol IDs
+├── train_X.npy          # (1316954, 24, 23) - Training sequences
+├── train_y.npy          # (1316954,) - Training labels
+├── train_asset_ids.npy  # (1316954,) - Training symbol IDs
+├── val_X.npy            # (282204, 24, 23) - Validation sequences
+├── val_y.npy            # (282204,) - Validation labels
+├── val_asset_ids.npy    # (282204,) - Validation symbol IDs
+├── test_X.npy           # (282205, 24, 23) - Test sequences
+├── test_y.npy           # (282205,) - Test labels
+├── test_asset_ids.npy   # (282205,) - Test symbol IDs
 ├── scalers.joblib       # StandardScaler fitted on training data
 └── metadata.json        # Configuration and statistics
 ```
@@ -619,23 +615,22 @@ training_data_v2_final/
 **metadata.json:**
 ```json
 {
-    "creation_date": "2025-09-28",
-    "symbols": 143,
+    "generation_timestamp": "2025-10-05T14:33:28.438935",
+    "num_symbols": 160,
     "lookback_window": 24,
-    "prediction_horizon": 8,
-    "profit_target": 0.05,
-    "stop_loss": 0.02,
-    "n_features": 23,
-    "total_sequences": 878740,
-    "train_sequences": 615118,
-    "val_sequences": 131811,
-    "test_sequences": 131811,
-    "positive_class_ratio": 0.069,
-    "train_positive_ratio": 0.068,
-    "val_positive_ratio": 0.071,
-    "test_positive_ratio": 0.070,
+    "prediction_horizon_hours": 24,
+    "profit_target": 0.015,
+    "stop_loss": 0.03,
+    "feature_count": 23,
+    "total_sequences": 1881363,
+    "train_samples": 1316954,
+    "val_samples": 282204,
+    "test_samples": 282205,
+    "positive_ratio_train": 0.2415,
+    "positive_ratio_val": 0.2687,
+    "positive_ratio_test": 0.2259,
     "features": [...],
-    "asset_id_map": {...}
+    "symbols_processed": [...]
 }
 ```
 
@@ -665,7 +660,7 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
 
 ---
 
-## 9. Phase 3 Data Enhancement
+## 9. Phase 3 Data Enhancement & October 2025 Refresh
 
 ### Historical Context
 
@@ -687,9 +682,9 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
 - **After:** 2 years (Oct 2023 - Oct 2025)
 - **Benefit:** Captures more market regimes
 
-#### 3. Label Strategy Refinement
+#### 3. Label Strategy Refinement (Historical)
 - **Experimented with:** +5% profit target (too sparse)
-- **Settled on:** +2.5% profit, -2% stop (6.9% positive ratio)
+- **Settled on:** +2.5% profit, −2% stop for initial production (6.9% positive ratio)
 - **Improvement:** 11.5× increase in positive class ratio (0.6% → 6.9%)
 
 #### 4. Feature Engineering Improvements
@@ -703,6 +698,13 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
 - Correlation analysis
 - Distribution analysis
 
+### October 2025 Label Strategy Refresh
+
+- **Motivation:** Backtests revealed signal scarcity and high false negatives despite strong offline metrics.
+- **Change Set:** Extended horizon to 24h, reduced profit target to +1.5%, and eased stop to −3.0%.
+- **Outcome:** Positive label ratio increased to 24.3% overall, providing ~4× more positive samples while preserving quality checks (std. scaling, leakage guards).
+- **Status:** New dataset `training_data_v2_final` regenerated on October 5, 2025 with updated metadata and documentation.
+
 ### Impact on Model Performance
 
 **Before Phase 3 (Baseline):**
@@ -715,7 +717,9 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
 - Validation Recall: 51.7-63.0%
 - 10-11× improvement
 
-**Conclusion:** Data enhancement was critical foundation for HPO success
+**October 2025 Refresh Status:** Training and HPO reruns with the 24h dataset are scheduled; performance metrics will be logged in `CONSOLIDATED_3` once available.
+
+**Conclusion:** Data enhancement was critical foundation for HPO success, and the latest refresh continues that remediation trajectory.
 
 ---
 
@@ -737,7 +741,7 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
    - Complete asset ID mapping
 
 3. **Label Distribution**
-   - Positive class ratio within acceptable range (5-10%)
+    - Positive class ratio within target range (20-30%)
    - Train/val/test distributions similar
 
 4. **Feature Ranges**
@@ -757,26 +761,26 @@ with open('data/training_data_v2_final/metadata.json', 'r') as f:
 **Data Quality Report Example:**
 ```
 === Data Quality Report ===
-Total Sequences: 878,740
-Training Set: 615,118 (70.0%)
-Validation Set: 131,811 (15.0%)
-Test Set: 131,811 (15.0%)
+Total Sequences: 1,881,363
+Training Set: 1,316,954 (70.0%)
+Validation Set: 282,204 (15.0%)
+Test Set: 282,205 (15.0%)
 
 Feature Statistics:
-- Mean (train): [-0.001, 0.002, ..., 0.000]
-- Std (train): [0.998, 1.001, ..., 0.999]
+- Mean (train): [-0.000, 0.000, ..., 0.000]
+- Std (train): [1.000, 1.000, ..., 1.000]
 - Missing Values: 0
 
 Label Distribution:
-- Train Positive: 6.8%
-- Val Positive: 7.1%
-- Test Positive: 7.0%
+- Train Positive: 24.2%
+- Val Positive: 26.9%
+- Test Positive: 22.6%
 
 Asset Coverage:
-- Symbols: 143
-- Min sequences per symbol: 4,211
-- Max sequences per symbol: 8,967
-- Avg sequences per symbol: 6,145
+- Symbols: 160
+- Min sequences per symbol: 4,728
+- Max sequences per symbol: 17,473
+- Avg sequences per symbol: 11,758
 
 Validation: PASSED ✓
 ```

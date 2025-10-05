@@ -87,9 +87,11 @@ class HistoricalDataLoader:
             # Convert each symbol to uppercase, stripping spaces
             for sector, syms in data.get('sectors', {}).items():
                 data['sectors'][sector] = [s.strip().upper() for s in syms]
-            # Also normalize ETF and crypto symbols
+            # Also normalize ETF, index, and crypto symbols
             for category, syms in data.get('etfs', {}).items():
                 data['etfs'][category] = [s.strip().upper() for s in syms]
+            for index_name, syms in data.get('indices', {}).items():
+                data['indices'][index_name] = [s.strip().upper() for s in syms]
             for category, syms in data.get('crypto', {}).items():
                 data['crypto'][category] = [s.strip().upper() for s in syms]
             return data
@@ -574,6 +576,9 @@ class HistoricalDataLoader:
             # Add ETF symbols
             for etf_symbols in symbols_config.get('etfs', {}).values():
                 all_symbols.update(etf_symbols)
+            # Add index symbols
+            for index_symbols in symbols_config.get('indices', {}).values():
+                all_symbols.update(index_symbols)
             # Add crypto symbols
             for crypto_symbols in symbols_config.get('crypto', {}).values():
                 all_symbols.update(crypto_symbols)
@@ -724,6 +729,8 @@ class HistoricalDataLoader:
                 all_symbols_flat.extend(sector_symbols)
             for etf_symbols in symbols_config.get('etfs', {}).values():
                 all_symbols_flat.extend(etf_symbols)
+            for index_symbols in symbols_config.get('indices', {}).values():
+                all_symbols_flat.extend(index_symbols)
             for crypto_symbols in symbols_config.get('crypto', {}).values():
                 all_symbols_flat.extend(crypto_symbols)
             

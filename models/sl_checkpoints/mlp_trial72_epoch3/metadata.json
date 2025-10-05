@@ -1,0 +1,37 @@
+{
+  "model_type": "mlp",
+  "trial_number": 72,
+  "epoch": 3,
+  "hpo_run_id": null,
+  "hyperparameters": {
+    "learning_rate": 1.0726239398390772e-04,
+    "batch_size": 256,
+    "weight_decay": 2.1403056853653915e-04,
+    "dropout_rate": 0.27825319822974104,
+    "focal_alpha": 0.8534979238472781,
+    "focal_gamma": 0.5765070137941654,
+    "scheduler_factor": 0.4257292734908578,
+    "scheduler_patience": 5,
+    "gradient_clip_norm": 3.697669796019419,
+    "early_stopping_patience": 5,
+    "hidden_layers": 4,
+    "hidden_dim_1": 161,
+    "hidden_dim_2": 44,
+    "hidden_dim_3": 17,
+    "asset_embedding_dim": 5
+  },
+  "validation_metrics": {
+    "f1": 0.3550891316848764,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "test_metrics": {
+    "f1": null,
+    "recall": null,
+    "precision": null,
+    "roc_auc": null
+  },
+  "checkpoint_date": "2025-10-05",
+  "notes": "Copied from models/hpo_derived/HPO_GRU_Production_mlp/BEST_epoch003_mlp_f10.3499_20251003_043600.pt. Pending integration of external validation metrics and MLflow run ID."
+}

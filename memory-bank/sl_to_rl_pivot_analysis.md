@@ -1,7 +1,7 @@
 # Research Report: Strategic Pivot from Supervised Learning to Multi-Agent RL
 
 **Document Version:** 1.0  
-**Date:** 2025-10-04  
+**Date:** 2025-10-05  
 **Author:** Trading Intelligence Team
 
 ## Executive Summary
@@ -114,7 +114,7 @@ These experiments run in parallel, offering potential mitigation (e.g., reducing
 
 ## Next Steps
 
-1. Approve RL architecture and training guide for implementation kickoff (Week 1).
-2. Allocate GPU resources and engineering bandwidth for RL environment build.
-3. Launch quick-win SL experiments for interim mitigation and benchmarking.
-4. Schedule weekly steering reviews to monitor progress and adjust roadmap.
+1. Close data remediation items identified in `data/validation_report.json`; re-run validation script to confirm Phase 0 readiness.
+2. Stand up `core/rl/` and `training/rl/` scaffolding with logging/testing harnesses ahead of Phase 1 environment work.
+3. Publish SL baseline + inference benchmark summary (leveraging `reports/sl_checkpoint_validation.json` and `reports/sl_inference_benchmarks.json`) to define RL success targets.
+4. Continue quick-win SL experiments in parallel and maintain weekly steering reviews to track RL roadmap risks.

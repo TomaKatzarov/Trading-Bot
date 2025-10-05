@@ -54,7 +54,27 @@ This project aims to develop an AI-powered trading system for autonomous trading
 
 ## Usage
 
-Detailed usage instructions for training models, running backtests, and deploying the trading system will be provided in specific documentation within the `scripts/` and `core/` directories.
+### End-to-end data refresh pipeline
+
+Use `scripts/run_full_data_update.py` to refresh historical data, recompute
+derived features, and regenerate the supervised-learning dataset that powers the
+training campaigns. The script stitches together historical ingestion,
+technical indicator calculation, sentiment attachment, data gap remediation,
+and dataset validation in a single runnable entry point.
+
+```bash
+python scripts/run_full_data_update.py
+```
+
+Key options include `--start-date/--end-date` for append-only refreshes,
+`--max-workers` to control parallelism, and `--skip-*` flags to omit individual
+steps when troubleshooting. By default, the regenerated dataset is written to
+`data/training_data_v2_final`, matching the path expected by the training and
+evaluation scripts documented under `training/`.
+
+Detailed usage instructions for training models, running backtests, and
+deploying the trading system will be provided in specific documentation within
+the `scripts/` and `core/` directories.
 
 ## Contributing
 

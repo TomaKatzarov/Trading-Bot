@@ -1,623 +1,2295 @@
 {
-  "total_symbols": 154,
-  "valid_symbols": 0,
-  "validation_date": "2025-10-01T14:12:21.680682",
-  "details": {
-    "AAPL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AAVEUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "ABBV": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ABT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ADAUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "ADBE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AEP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ALB": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AMAT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AMD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AMGN": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AMT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AMZN": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "APD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AVB": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "AXP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BAC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BKNG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BLK": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BMY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "BTCUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "C": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CAT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CCI": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CF": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "COF": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "COMPUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "COP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "COST": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CRM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CSCO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CVS": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "CVX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "D": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DBA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DHR": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DOTUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "DOW": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DUK": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "DVN": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ECL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EEM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EFA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EOG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EQIX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EQR": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EQT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ETHUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "EXC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "EXR": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "FANG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "FCX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "FXI": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "GE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "GILD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "GLD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "GOOGL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "GS": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "HAL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "HD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "HON": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "INTC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "IWM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "JNJ": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "JPM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "KMI": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "KO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "LIN": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "LLY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "LMT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "LOW": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MAR": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MCD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MDT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "META": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MKRUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "MMM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MPC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MRK": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MS": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "MSFT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "NEE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "NEM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "NKE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "NOW": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "NVDA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "O": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "ORCL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "OXY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PCG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PEG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PEP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PFE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PLD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PNC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PSA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PSX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PXD": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "PYPL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "QCOM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "QQQ": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "RTX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SBUX": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SHW": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SLB": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SLV": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SOLUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "SPY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SQQQ": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SRE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "SYK": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TFC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TGT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TMO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TQQQ": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TSLA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "TXN": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "UNG": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "UNH": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "UNIUSD": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "UNP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "UPS": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "USB": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "USO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "UVXY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "V": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "VEA": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "VIX": {
-      "valid": false,
-      "error": "No data.parquet"
-    },
-    "VLO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "VOO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "VTI": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "VWO": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "WFC": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "WMT": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "WY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XEL": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLB": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLF": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLI": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLK": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLP": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLRE": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLU": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLV": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XLY": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "XOM": {
-      "valid": false,
-      "error": "'numpy.ndarray' object has no attribute 'shift'"
-    },
-    "YFIUSD": {
-      "valid": false,
-      "error": "No data.parquet"
+  "generated_at": "2025-10-05T11:56:48.088710+00:00",
+  "target_start": "2023-10-02T00:00:00+00:00",
+  "target_end": "2025-10-01T00:00:00+00:00",
+  "timeframe": "1Hour",
+  "total_symbols": 162,
+  "valid_symbols": 160,
+  "coverage_pct": 98.76543209876543,
+  "status_counts": {
+    "ok": 160,
+    "missing": 2
+  },
+  "symbols": [
+    {
+      "symbol": "AAPL",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AAVEUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ABBV",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ABT",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ADAUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ADBE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6467,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ADP",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AEP",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ALB",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6760,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AMAT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7135,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AMD",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AMGN",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AMT",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AMZN",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "APD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AVB",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AVGO",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "AXP",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 5693,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BA",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7680,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BAC",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7863,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BKNG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BLK",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BMY",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6904,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BRK.B",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "BTCUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "C",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 7340,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CAT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 5748,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CCI",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CF",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CMCSA",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "COF",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 5120,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "COMPUSD",
+      "status": "missing",
+      "data_start": null,
+      "data_end": null,
+      "rows": null,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": null,
+      "notes": [
+        "File not found: data/historical/COMPUSD/1Hour/data.parquet"
+      ]
+    },
+    {
+      "symbol": "COP",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "COST",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CRM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6913,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CSCO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 7392,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CVS",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 6725,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "CVX",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7131,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "D",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DBA",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DE",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DHR",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 4827,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DIS",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DOTUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DOW",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DUK",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 5058,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "DVN",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 7078,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ECL",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EEM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 6527,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EFA",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 5421,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EOG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EQIX",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EQR",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EQT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T22:00:00+00:00",
+      "rows": 6092,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T22:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ETHUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EXC",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "EXR",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "FANG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "FCX",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7440,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "FXI",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7927,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T21:00:00+00:00",
+      "rows": 6563,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T21:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GILD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GLD",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7889,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GOOG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GOOGL",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7998,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "GS",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T21:00:00+00:00",
+      "rows": 5723,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T21:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "HAL",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6854,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "HD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "HON",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "INTC",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7998,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "IWM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 8000,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "JNJ",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "JPM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 6920,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "KMI",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 6537,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "KO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7685,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "LIN",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "LLY",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 6704,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "LMT",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "LOW",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MA",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T20:00:00+00:00",
+      "rows": 4942,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T20:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MAR",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 4775,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MCD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MDLZ",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MDT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 5432,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "META",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7966,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MKRUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MMM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 5990,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MPC",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MRK",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MS",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "MSFT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7998,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NEE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 6679,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NEM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7744,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NFLX",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NKE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7698,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NOW",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T20:00:00+00:00",
+      "rows": 5339,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T20:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "NVDA",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "O",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7791,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "ORCL",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7359,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "OXY",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7936,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PCG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PEG",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PEP",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PFE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7983,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PG",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6015,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PLD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PNC",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PSA",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PSX",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 5059,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PXD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "PYPL",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7966,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "QCOM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7735,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "QQQ",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "RTX",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SBUX",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 7306,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SHW",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SLB",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7126,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SLV",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7996,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SO",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SOLUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SPY",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 8014,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SQQQ",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7994,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SRE",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "SYK",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TFC",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 5609,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TGT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6637,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TMO",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TQQQ",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TSLA",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7999,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "TXN",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "UNG",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7977,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "UNH",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "UNIUSD",
+      "status": "missing",
+      "data_start": null,
+      "data_end": null,
+      "rows": null,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": null,
+      "notes": [
+        "File not found: data/historical/UNIUSD/1Hour/data.parquet"
+      ]
+    },
+    {
+      "symbol": "UNP",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "UPS",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "USB",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 5664,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "USO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7737,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "UVXY",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7993,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "V",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6068,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VEA",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VIX",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VLO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T20:00:00+00:00",
+      "rows": 5332,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T20:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VOO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7857,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VTI",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 6460,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "VWO",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 5336,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "WFC",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 6854,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "WMT",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7522,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "WY",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XEL",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLB",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 4900,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7599,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLF",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7859,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLI",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T08:00:00+00:00",
+      "rows": 5486,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLK",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7209,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLP",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 5746,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLRE",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 5485,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLU",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T09:00:00+00:00",
+      "rows": 6345,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLV",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 6132,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XLY",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "XOM",
+      "status": "ok",
+      "data_start": "2023-10-02T12:00:00+00:00",
+      "data_end": "2025-10-01T10:00:00+00:00",
+      "rows": 7648,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Starts at 2023-10-02T12:00:00+00:00 (target 2023-10-02T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
+    },
+    {
+      "symbol": "YFIUSD",
+      "status": "ok",
+      "data_start": "2023-10-02T00:00:00+00:00",
+      "data_end": "2025-09-30T23:00:00+00:00",
+      "rows": 17520,
+      "missing_columns": null,
+      "null_columns": null,
+      "sentiment_out_of_bounds": false,
+      "notes": [
+        "Ends at 2025-09-30T23:00:00+00:00 (target 2025-10-01T00:00:00+00:00)",
+        "Within tolerance despite minor start/end deviations"
+      ]
     }
-  }
+  ]
 }
