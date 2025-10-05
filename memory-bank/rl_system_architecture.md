@@ -1,7 +1,7 @@
 # Multi-Agent Reinforcement Learning Trading System Architecture
 
 **Document Version:** 1.0  
-**Date:** 2025-10-04  
+**Date:** 2025-10-05  
 **Status:** Approved for Implementation Planning
 
 ## Executive Summary
@@ -116,7 +116,10 @@ Observation Dim ≈ 512
 
 ### Reward Design
 
-Reward integrates micro- and macro-level targets. For symbol agent $i$ at time $t$:
+Reward integrates micro- and macro-level targets via the configurable `RewardShaper`
+module (`core/rl/environments/reward_shaper.py`). Component weights are defined in
+`RewardConfig` and validated each episode using `scripts/analyze_reward_signals.py`
+to prevent dominance or collapse. For symbol agent $i$ at time $t$:
 
 $$
 \begin{aligned}
@@ -160,7 +163,7 @@ Replay Buffers ─► PPO/MAPPO Learners ─► Policy Weights ─► Checkpoint
 
 ## Hybrid SL + RL Integration
 
-- **Inference Cache:** SL checkpoints produce rolling probability grids at 1-hour cadence; stored as feature tensors for RL consumption.
+- **Inference Cache:** SL checkpoints now staged under `models/sl_checkpoints/<model>/` with verified <0.2 ms/sample inference (`reports/sl_inference_benchmarks.json`); probabilities are refreshed hourly and cached as feature tensors for RL consumption.
 - **Auxiliary Losses:** During RL training, add Kullback–Leibler divergence regularizer encouraging alignment with SL predictions early in training, annealed over epochs.
 - **Warm Starts:** Initialize actor heads with regression weights that approximate SL decision boundaries to reduce exploration burn-in.
 
@@ -174,7 +177,7 @@ Replay Buffers ─► PPO/MAPPO Learners ─► Policy Weights ─► Checkpoint
 
 | Risk | Description | Mitigation |
 |------|-------------|------------|
-| Reward Misalignment | Over- or under-weighted reward terms could reintroduce churn or excessive risk. | Conduct reward coefficient ablations; monitor component-level contributions; integrate human-in-the-loop review for early episodes. |
+| Reward Misalignment | Over- or under-weighted reward terms could reintroduce churn or excessive risk. | Conduct reward coefficient ablations; monitor component-level contributions via `RewardShaper.get_episode_stats()` and `scripts/analyze_reward_signals.py`; integrate human-in-the-loop review for early episodes. |
 | Exploration Blowup | 143 agents exploring simultaneously may trigger destabilizing trades. | Use entropy annealing, action masking under master directives, and staged symbol onboarding (curriculum). |
 | Regime Non-Stationarity | Market regime shifts could invalidate policies. | Implement regime detection module feeding master agent; schedule quarterly fine-tunes; maintain rapid retraining pipeline. |
 | Computational Overhead | MAPPO with 143 agents may strain resources. | Employ parameter sharing, mixed precision training, and prioritized rollout batching; scale horizontally with Ray cluster. |

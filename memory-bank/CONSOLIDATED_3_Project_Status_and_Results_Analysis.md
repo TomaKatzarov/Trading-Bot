@@ -75,6 +75,19 @@ Phase 6: Production Deployment              🔜 ON HOLD
 - Whether to retrain models with different profit targets
 - Whether to implement regime-aware filters before RL development
 
+### RL Initiative Kickoff (Phase 0)
+**Status:** ✅ Foundational tasks underway (Week 1 of RL roadmap)
+
+- **Environment & Hardware Verification:** `scripts/verify_rl_environment.py`, `scripts/verify_rl_libraries.py`, and `scripts/test_gpu_rl_readiness.py` confirm Python 3.12.10, PyTorch 2.8.0.dev+cu128, CUDA 12.8, and RTX 5070 Ti readiness. Reports archived in `docs/setup_rl_environment.md` and `docs/gpu_readiness_report.txt`.
+- **Data Readiness Audit:** `scripts/validate_rl_data_readiness.py` produced `data/validation_report.json` summarising symbol coverage (86/162 passing) and enumerating remediation gaps (19 missing parquet directories, 57 symbols outside tolerance). Narrative captured in `docs/data_quality_report_rl.md`.
+- **SL Checkpoint Staging:** Best HPO checkpoints (MLP72, LSTM62, GRU93) copied to `models/sl_checkpoints/` with scalers and metadata. New validation harness `scripts/test_sl_checkpoint_loading.py` confirms load/inference parity; `reports/sl_checkpoint_validation.json` logs metrics and logits.
+- **Inference Benchmarking:** `scripts/benchmark_sl_inference.py` demonstrates <0.2 ms/sample latency for all checkpoints on GPU (`reports/sl_inference_benchmarks.json`), meeting Phase 0 performance target.<br>
+- **Remaining Phase 0 Work:** Resolve data coverage gaps, scaffold RL package structure (`core/rl/`, `training/rl/`), and develop SL baseline report prior to Phase 1 kickoff.
+
+**Phase 1 Progress Snapshot (October 5, 2025):**
+- Task 1.2 ✅ Feature engineering stack (`FeatureExtractor`, `RegimeIndicators`) wired into `TradingEnvironment`, benchmarked at P95 < 2 ms with cache warm, and regression suite (`tests/test_feature_extractor.py`, `tests/test_trading_env.py`) green in `.venv`.
+- **Task 1.3 ✅ Reward function overhaul:** Introduced `RewardShaper` with seven components (PnL, cost, time, Sharpe, drawdown, sizing, optional hold penalty), comprehensive unit coverage (`tests/test_reward_shaper.py`), integration into `TradingEnvironment` with per-step component analytics, and reward signal diagnostics via `scripts/analyze_reward_signals.py`. Full suite passes inside `trading_rl_env` with Gymnasium dependencies.
+
 ---
 
 ## 2. Strategic Roadmap
@@ -234,7 +247,8 @@ Phase 6: Production Deployment              🔜 ON HOLD
 - Expanded to 143 symbols (from 50)
 - Extended to 2 years of data (from 1)
 - Improved positive class ratio to 6.9% (from 0.6%)
-- Result: 878,740 training sequences
+- October 2025 refresh: extended to 24h horizon with +1.5% / −3.0% thresholds, raising positives to 24.3%
+- Result: 1,881,363 training sequences in latest run
 
 #### 3.2 HPO Campaigns
 
@@ -798,21 +812,24 @@ early_stopping_patience: 8
 
 ---
 
-#### Decision 4: Profit Target Adjustment (+5% → +2.5%)
-**Date:** September 2025  
-**Context:** Initial +5% target yielded only 0.6% positive class ratio
+#### Decision 4: Profit Target & Horizon Adjustments
+**Date:** September 2025 (initial), October 2025 (refresh)  
+**Context:** Initial +5% target yielded only 0.6% positives; later, 8h/+2.5% setup still produced poor backtests
 
-**Decision:** Decrease profit target to +2.5%, accept higher positive class ratio
+**Decision:**
+- September: Decrease profit target to +2.5% (8h horizon) to reach ~6.9% positives
+- October: Extend prediction horizon to 24h, lower profit target to +1.5%, widen stop to −3.0%
 
 **Rationale:**
-- +5% too easy, inflated positive class with marginal opportunities
-- +2.5% filters for higher-quality signals
-- Better aligns with realistic trading costs
-- Positive class ratio 6.9% still trainable
+- +5% target starved the dataset; +2.5% enabled HPO success but remained sparse for trading
+- Backtesting showed SL models firing too many weak signals; longer horizon plus easier target increases high-confidence positives
+- New configuration provides ~4× more positive examples (24.3%) without sacrificing quality checks
 
-**Outcome:** Improved model discrimination (F1+ increased from 0.03 to 0.28-0.31)
+**Outcome:**
+- Classification HPO benefited from the interim +2.5% setting (F1+ 0.28-0.31)
+- New 24h dataset delivered 1.88M sequences; trading re-evaluation pending
 
-**Status:** ✅ Validated for classification; ⚠️ Pending backtest validation
+**Status:** ⚠️ Monitoring — offline metrics to be re-measured on refreshed dataset
 
 ---
 
@@ -875,7 +892,7 @@ early_stopping_patience: 8
 
 #### Decision 9: Use Focal Loss for Class Imbalance
 **Date:** June 2025  
-**Context:** 6.9% positive class ratio causing model bias toward negative class
+**Context:** Historical 6.9% positive class ratio caused the model to bias toward negatives (still applicable for sparse subsets)
 
 **Decision:** Implement Focal Loss with alpha=0.25, gamma=2.0-3.0
 
@@ -885,7 +902,7 @@ early_stopping_patience: 8
 - More effective than simple class weighting
 - Proven in computer vision imbalanced datasets
 
-**Outcome:** Significant improvement; validation F1+ increased from 0.03 to 0.28-0.31
+**Outcome:** Significant improvement; validation F1+ increased from 0.03 to 0.28-0.31. With the October 2025 refresh (~24% positives), focal loss remains an optional lever for symbol-level imbalance.
 
 **Status:** ✅ Validated
 
@@ -1034,21 +1051,21 @@ early_stopping_patience: 8
 
 ### Learning 5: Data Enhancement Critical Foundation
 
-**Discovery:** Expanding from 50 to 143 symbols and improving positive class ratio from 0.6% to 6.9% enabled HPO success
+**Discovery:** Expanding from 50 to 143 symbols and improving positive class ratio from 0.6% to 6.9% enabled HPO success; the October 2025 refresh pushed this further to 24.3% via 24h/1.5%/−3% labeling.
 
 **Evidence:**
 - Baseline with 50 symbols: F1+ 0.03, Recall 0.05
 - Enhanced with 143 symbols: F1+ 0.28-0.31, Recall 0.40-0.63 (10× improvement)
 
 **Key Factors:**
-1. More symbols → more diverse patterns
-2. Better label strategy → higher quality positives
-3. Longer timeframe → more market regimes
+1. More symbols → more diverse patterns (now 160 symbols processed cleanly)
+2. Progressive label strategy refinements → higher quality positives (now ~24% without extreme imbalance)
+3. Longer timeframe → more market regimes captured for both SL and future RL
 
 **Actionable Guidance:**
 - Invest in data quality before model complexity
-- Balance positive class ratio (5-10% ideal)
-- Expand symbol universe for generalization
+- Target a positive class ratio that supports trading realism (20-30% working target; monitor per-symbol skew)
+- Expand symbol universe for generalization and ensure refreshed datasets propagate to downstream experiments
 
 **Status:** Data enhancement was necessary but not sufficient (backtest still failed)
 
@@ -1169,36 +1186,41 @@ early_stopping_patience: 8
 
 ### Immediate Actions (Next 7 Days)
 
-
-#### Action 1: Decision Point - RL Proceed/Pivot
-**Timeline:** October 15, 2025  
+#### Action 1: Phase 0 Data Remediation
+**Timeline:** October 8, 2025  
 **Priority:** P0
 
-**Context:** SL backtesting failed;
-**Options:**
-1. Proceed with RL 
-2. Pivot to alternative approaches as SL is fundamentally flawed
+**Tasks:** Re-ingest missing parquet directories for 19 symbols, repair 57 coverage gaps flagged in `docs/data_quality_report_rl.md`, and rerun `scripts/validate_rl_data_readiness.py` to close out 0.2.x remediation items.
 
-**Deliverable:** Strategic decision document
+#### Action 2: RL Directory Scaffolding
+**Timeline:** October 10, 2025  
+**Priority:** P0
+
+**Tasks:** Create `core/rl/` and `training/rl/` package skeletons, add initial `__init__.py`, placeholder environment stubs, and update `.gitignore` to isolate rollout artifacts per Phase 0 Task 0.4.
+
+#### Action 3: Baseline Documentation Refresh
+**Timeline:** October 11, 2025  
+**Priority:** P1
+
+**Tasks:** Compile SL benchmark summary leveraging `reports/sl_checkpoint_validation.json` and `reports/sl_inference_benchmarks.json`, populate `docs/baseline_for_rl_comparison.md`, and set explicit RL success targets per Phase 0 Task 0.5.
 
 ---
 
 ### Medium-Term Actions (Next 90 Days)
 
-#### Action 2: Begin RL System Development (If Approved)
+#### Action 4: RL System Build-Out
 **Timeline:** November 2025 - January 2026  
-**Priority:** P0 (if approved)
+**Priority:** P0
 
 **Prerequisites:**
-- Decision made to proceed with RL
-- Compute resources allocated
+- Phase 0 exit criteria met (data clean, checkpoints benchmarked, RL scaffolding committed)
+- GPU resources scheduled for continuous training
 
 **Phases:**
-- Environment implementation and testing
-- Shared encoder pre-training
-- Symbol agent training (MAPPO)
-- Master agent training
-- Multi-agent coordination tuning
+- Environment implementation and testing (Phase 1)
+- Shared encoder pre-training and symbol PPO curriculum (Phase 2)
+- Master agent MAPPO coordination (Phase 3)
+- Walk-forward validation & stress testing (Phase 4)
 
 ---
 

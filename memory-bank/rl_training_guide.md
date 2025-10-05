@@ -1,7 +1,7 @@
 # Multi-Agent RL Training Guide
 
-**Document Version:** 1.0  
-**Date:** 2025-10-04  
+**Document Version:** 1.1  
+**Date:** 2025-10-05  
 **Status:** Ready for Execution (Phase 1-3)
 
 ## Purpose
@@ -17,29 +17,37 @@ This guide describes the operational procedures for developing, training, and va
 - Optional: Dedicated evaluation node with CPU focus for backtesting
 
 ### Software Stack
-- Python 3.10 (managed via project `.venv`)
-- PyTorch 2.2 with CUDA 12.x
-- Gymnasium 0.29+, Ray 2.9 (for distributed rollouts)
-- Optuna 4.3 (hyperparameter sweeps)
-- MLflow 2.15 (experiment tracking)
-- Redis / PostgreSQL (experience buffer and Optuna storage)
+- Python 3.12.10 (project `.venv`)
+- PyTorch 2.8.0.dev+cu128 (CUDA 12.8)
+- Gymnasium 1.1.1, Stable-Baselines3 2.7.0, Ray 2.49.2 (`ray[rllib]` extras)
+- Optuna 3.x (bundled via `requirements_rl.txt`)
+- MLflow 2.15 (tracking server)
+- Redis / PostgreSQL (experience buffer + Optuna storage)
 
-Install dependencies:
+Install & verify:
 
 ```bash
 pip install -r requirements.txt
-pip install ray[rllib]==2.9.0 gymnasium==0.29.1
-pip install optuna==4.3.0
+pip install -r requirements_rl.txt
+python scripts/verify_rl_environment.py
+python scripts/verify_rl_libraries.py
+python scripts/test_gpu_rl_readiness.py
 ```
 
 ### Data Assets
 - Historical OHLCV + technical feature parquet files (`data/historical/<SYMBOL>/1Hour/data.parquet`)
 - Sentiment overlays (`data/sentiment/<SYMBOL>/daily_sentiment.parquet`)
 - Macro/regime features (generated via `analysis/generate_model_index.py`)
-- Supervised learning checkpoints (`models/hpo_derived/mlp_trial72.pt`, etc.)
+- Supervised learning checkpoints staged in `models/sl_checkpoints/<model>/model.pt` with `metadata.json` and `scalers.joblib`
 - Consolidated SL probability tensors (`data/precomputed/sl_signals/*.npy`)
+- Data quality report + remediation tracker (`data/validation_report.json`, `docs/data_quality_report_rl.md`)
 
 ## Environment Setup
+
+0. **Preflight Checks**
+   - Confirm GPU readiness via `scripts/test_gpu_rl_readiness.py` (logs → `docs/gpu_readiness_report.txt`).
+   - Validate RL data coverage with `scripts/validate_rl_data_readiness.py`; review `data/validation_report.json` for outstanding symbol gaps.
+   - Smoke-test SL checkpoints with `scripts/test_sl_checkpoint_loading.py` and capture baselines via `scripts/benchmark_sl_inference.py` before integrating probabilities into RL observations.
 
 1. **Feature Fusion Pipeline**
    - Run `scripts/generate_combined_training_data.py --include-rl-features` to produce RL-ready tensors (technical, sentiment, macro, SL signals).
@@ -80,6 +88,7 @@ pip install optuna==4.3.0
 
 3. **Reward Coefficient Calibration**
    - Conduct grid search on reward coefficients; log contributions in MLflow to ensure no single component dominates (>60%).
+   - After each calibration run, export episode traces (`reward_shaper.component_history`) and invoke `python scripts/analyze_reward_signals.py --episode-data <path>` to confirm healthy component balance and signal-to-noise levels.
 
 ## Phase 2: Symbol Agent Training (PPO)
 
