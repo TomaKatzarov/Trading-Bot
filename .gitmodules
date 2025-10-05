@@ -1,0 +1,3 @@
+[submodule "template_source"]
+	path = template_source
+	url = https://github.com/app-generator/flask-black-dashboard.git

@@ -1,0 +1,65 @@
+# LSTM Baseline Configuration - Phase 2 Baseline Training
+# Primary recurrent model with attention mechanism
+
+model_type: 'lstm'
+experiment_name: 'Baseline_Training_Production'
+output_dir: 'training/runs/lstm_baseline'
+use_mlflow: true
+num_workers: 8
+
+# Data configuration
+data_config:
+  use_pregenerated: true
+  data_dir: 'data/training_data'
+  lookback_window: 24
+
+# Model architecture configuration
+model_config:
+  type: 'lstm'
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.3
+  attention_dim: 64
+  bidirectional: false
+
+# Training configuration
+training_config:
+  batch_size: 512
+  epochs: 100
+  learning_rate: 0.001
+  
+  # Optimizer settings
+  optimizer: 'adamw'
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  
+  # Loss function (Focal Loss for class imbalance)
+  loss_function:
+    type: 'focal'
+    alpha: 0.25
+    gamma: 2.0
+  
+  # Regularization
+  gradient_clip_norm: 1.0
+  
+  # Early stopping
+  early_stopping_patience: 15
+  monitor_metric: 'f1'
+  
+  # Learning rate scheduling
+  scheduler: 'reduce_on_plateau'
+  scheduler_mode: 'max'
+  scheduler_factor: 0.5
+  scheduler_patience: 7
+  
+  # Data loading
+  use_weighted_sampling: false
+
+# Experiment tags
+experiment:
+  name: "Baseline_Training_Production"
+  stage: "PRODUCTION"
+  type: "SINGLE_TRAINING"
+  purpose: "baseline_benchmark"
+  phase: "baseline_training"
+  model_type: "lstm"

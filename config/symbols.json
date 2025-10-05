@@ -1,0 +1,34 @@
+{
+  "sectors": {
+    "Technology": ["AAPL", "MSFT", "NVDA", "ADBE", "AMD", "INTC", "CSCO", "QCOM", "TXN", "AMAT", "GOOGL", "META", "CRM", "ORCL", "NOW"],
+    "Finance": ["JPM", "BAC", "WFC", "GS", "MS", "C", "BLK", "AXP", "PYPL", "V", "MA", "COF", "USB", "PNC", "TFC"],
+    "Healthcare": ["JNJ", "PFE", "MRK", "ABT", "AMGN", "GILD", "BMY", "CVS", "MDT", "SYK", "UNH", "LLY", "TMO", "DHR", "ABBV"],
+    "Energy": ["XOM", "CVX", "COP", "SLB", "EOG", "PSX", "VLO", "MPC", "HAL", "KMI", "OXY", "DVN", "FANG", "PXD", "EQT"],
+    "Consumer": ["AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "TGT", "LOW", "BKNG", "MAR", "WMT", "PG", "KO", "PEP", "COST"],
+    "Industrials": ["BA", "CAT", "GE", "LMT", "MMM", "UPS", "RTX", "HON", "UNP", "DE"],
+    "Materials": ["LIN", "APD", "SHW", "ECL", "DD", "DOW", "FCX", "NEM", "CF", "ALB"],
+    "Utilities": ["NEE", "DUK", "SO", "AEP", "EXC", "XEL", "PEG", "SRE", "D", "PCG"],
+    "RealEstate": ["PLD", "AMT", "CCI", "EQIX", "PSA", "EXR", "AVB", "EQR", "WY", "O"]
+  },
+  "indices": {
+    "S&P 500": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "BRK.B", "JNJ", "JPM", "V", "PG", "NVDA", "HD", "MA", "DIS", "ADBE", "PYPL", "CRM", "NFLX", "CMCSA"],
+    "Nasdaq 100": ["AAPL", "MSFT", "AMZN", "GOOG", "META", "TSLA", "NVDA", "PYPL", "ADBE", "CSCO", "INTC", "CMCSA", "AMGN", "TXN", "AVGO", "QCOM", "GILD", "MDLZ", "ADP", "BKNG"]
+  },
+  "etfs": {
+    "Market": ["SPY", "QQQ", "IWM", "VTI", "VOO"],
+    "Sector": ["XLK", "XLF", "XLV", "XLE", "XLY", "XLI", "XLB", "XLU", "XLP", "XLRE"],
+    "International": ["VEA", "VWO", "EFA", "EEM", "FXI"],
+    "Volatility": ["VIX", "UVXY", "SQQQ", "TQQQ"],
+    "Commodities": ["GLD", "SLV", "USO", "UNG", "DBA"]
+  },
+  "crypto": {
+    "Major": ["BTCUSD", "ETHUSD", "ADAUSD", "SOLUSD", "DOTUSD"],
+    "DeFi": ["UNIUSD", "AAVEUSD", "COMPUSD", "MKRUSD", "YFIUSD"]
+  },
+  "timeframes": {
+    "intraday": ["1m", "5m", "15m", "30m", "1h"],
+    "daily": ["1d", "2d", "3d"],
+    "weekly": ["1w", "2w"],
+    "monthly": ["1M", "3M"]
+  }
+}

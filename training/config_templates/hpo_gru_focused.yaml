@@ -1,0 +1,96 @@
+# GRU HPO Configuration - Overfitting Mitigation & Recall Optimization
+experiment_config:
+  name: "HPO_GRU_Production"
+  stage: "HPO"
+  purpose: "optimize_gru_addressing_overfitting_and_recall"
+  n_trials: 75
+  timeout_hours: 25
+
+data_config:
+  pregenerated_path: "data/training_data_v2_final"  # New enhanced dataset with full 23 features
+  lookback_window: 24
+  num_workers: 8
+
+model_config:
+  type: "gru"
+  # Search space for model architecture
+  hidden_size:
+    type: "categorical"
+    values: [64, 96, 128, 192]  # Wider range, include smaller sizes
+  num_layers:
+    type: "categorical"
+    values: [1, 2, 3]
+  dropout:
+    type: "float"
+    low: 0.3
+    high: 0.7  # Higher dropout to combat overfitting
+  attention_dim:
+    type: "categorical"
+    values: [32, 48, 64, 96]
+  bidirectional:
+    type: "categorical"
+    values: [false, true]  # Try bidirectional GRU
+
+training_config:
+  epochs: 100
+  # Search space for training hyperparameters
+  batch_size:
+    type: "categorical"
+    values: [64, 128, 256]
+  learning_rate:
+    type: "loguniform"
+    low: 0.0001
+    high: 0.002
+  optimizer: "adamw"
+  weight_decay:
+    type: "float"
+    low: 0.01
+    high: 0.1  # Stronger L2 regularization
+  gradient_clip_norm:
+    type: "categorical"
+    values: [0.5, 1.0, 2.0]
+  
+  # Early stopping
+  early_stopping_patience: 15
+  early_stopping_metric: "val_f1"
+  
+  # Loss function - Critical for class imbalance
+  loss_function: "focal_loss"
+  focal_alpha:
+    type: "float"
+    low: 0.15
+    high: 0.45  # Tune class weight
+  focal_gamma:
+    type: "float"
+    low: 1.5
+    high: 3.0  # Tune focusing parameter
+
+lr_scheduler_config:
+  type: "reduce_on_plateau"
+  factor: 0.5
+  patience:
+    type: "int"
+    low: 5
+    high: 10
+  mode: "max"  # Maximize val_f1
+
+# Optimization objectives
+optimization:
+  direction: "maximize"
+  metric: "val_f1"
+  
+  # Multi-objective: also minimize overfitting
+  secondary_objectives:
+    - name: "overfitting_gap"
+      weight: -0.3  # Penalize large train-val gap
+      formula: "train_f1 - val_f1"
+    
+    - name: "recall_weight"
+      weight: 0.5  # Reward higher recall
+      formula: "val_recall"
+
+# Pruning strategy
+pruning:
+  enabled: true
+  patience: 10  # Prune if no improvement in 10 epochs
+  min_epochs: 15  # Don't prune before epoch 15

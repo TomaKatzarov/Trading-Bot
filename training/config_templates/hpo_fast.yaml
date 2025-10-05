@@ -1,0 +1,98 @@
+# HPO Fast Configuration - Optimized for Quick Trials
+# Designed for RTX 5070 Ti + i5-13600K system with 96GB RAM
+
+model_type: 'lstm'
+experiment_name: 'hpo_fast_trial'
+output_dir: 'hpo_results_quick'
+use_mlflow: true
+num_workers: 8  # Optimize for i5-13600K (14 cores)
+
+# Data preparation configuration
+data_config:
+  symbols_config_path: 'config/symbols.json'
+  feature_list:
+    - 'open'
+    - 'high' 
+    - 'low'
+    - 'close'
+    - 'volume'
+    - 'vwap'
+    - 'SMA_20'
+    - 'EMA_12'
+    - 'RSI_14'
+    - 'MACD_line'
+    - 'MACD_signal'
+    - 'MACD_hist'
+    - 'BB_upper'
+    - 'BB_middle'
+    - 'BB_lower'
+    - 'BB_bandwidth'
+    - 'DayOfWeek_sin'
+    - 'DayOfWeek_cos'
+    - 'sentiment_score_hourly_ffill'
+  
+  lookback_window: 24
+  profit_target: 0.05
+  stop_loss_target: 0.02
+  prediction_horizon_hours: 8
+  
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  
+  scaling_method: 'standard'
+  nan_handling_features: 'ffill'
+  sample_weights_strategy: 'balanced'
+
+# Model architecture configuration
+model_config:
+  n_features: 17
+  num_assets: 154
+  asset_embedding_dim: 8
+  lstm_hidden_dim: 64
+  lstm_num_layers: 2
+  attention_dim: 64
+  dropout_rate: 0.3
+  use_layer_norm: true
+
+# Training configuration - OPTIMIZED FOR SPEED
+training_config:
+  # CRITICAL: Reduced epochs for fast HPO trials
+  epochs: 15  # Down from 100 - sufficient for HPO
+  
+  # CRITICAL: Larger batch size for RTX 5070 Ti (16GB VRAM)
+  batch_size: 256  # Up from 64 - maximize GPU utilization
+  
+  learning_rate: 0.0001  # 1e-4 in decimal format (YAML compatibility)
+  
+  # Optimizer settings
+  optimizer: 'adamw'
+  weight_decay: 0.00001  # 1e-5 in decimal format (YAML compatibility)
+  betas: [0.9, 0.999]
+  
+  # Learning rate scheduling
+  scheduler: 'reduce_on_plateau'
+  scheduler_factor: 0.5
+  scheduler_patience: 3  # Reduced from 5 for faster trials
+  
+  # Regularization
+  gradient_clip_norm: 1.0
+  
+  # Early stopping - More aggressive for HPO
+  early_stopping_patience: 5  # Down from 15 - stop bad trials quickly
+  monitor_metric: 'f1'
+  
+  # Data loading
+  use_weighted_sampling: false
+  
+  # CRITICAL: Enable mixed precision for 2x speedup
+  use_amp: true  # Automatic Mixed Precision (FP16)
+  
+  # CRITICAL: Disable torch.compile for HPO (compile overhead too high)
+  use_torch_compile: false
+  
+  # Loss function
+  loss_function:
+    type: 'focal'
+    alpha: 0.25
+    gamma: 2.0

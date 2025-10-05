@@ -88,6 +88,54 @@ ipython_config.py
 __pycache__/
 .env
 
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Roo AI
+.roo/
+.roomodes
+
+# MLflow
+mlruns/
+
+# Model checkpoints and training artifacts
+hpo_studies/
+*.pt
+*.pth
+*.ckpt
+
+# Database files
+*.db
+*.sqlite
+*.db-journal
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Large data files (use Git LFS instead)
+*.npy
+*.npz
+*.parquet
+*.h5
+*.hdf5
+
+# Logs
+logs/
+*.log
+
+# Reports (can be regenerated)
+reports/
+backtesting/results/
+
+# Memory bank - only exclude archived subdirectory
+memory-bank/Archived/
+
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is

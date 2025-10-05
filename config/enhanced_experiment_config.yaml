@@ -1,0 +1,271 @@
+# Enhanced Experiment Management Configuration
+# This file demonstrates the configuration options available for the enhanced
+# experiment management and tracking system implemented in Section 6.
+
+# Model Configuration
+model_type: "mlp"  # Options: mlp, lstm, gru, cnn_lstm
+
+# Training Configuration
+training:
+  epochs: 100
+  batch_size: 512
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 10
+  gradient_clip_max_norm: 1.0
+  
+  # Learning rate scheduler
+  scheduler:
+    type: "ReduceLROnPlateau"  # Options: ReduceLROnPlateau, StepLR, ExponentialLR
+    factor: 0.5
+    patience: 5
+    min_lr: 0.00001
+  
+  # Data loading
+  num_workers: 4
+  pin_memory: true
+  drop_last: false
+
+# Model Architecture Configuration
+model:
+  # MLP specific
+  hidden_sizes: [512, 256, 128]
+  dropout: 0.3
+  activation: "relu"
+  
+  # LSTM/GRU specific
+  hidden_size: 256
+  num_layers: 2
+  bidirectional: false
+  
+  # CNN-LSTM specific
+  conv_channels: [32, 64, 128]
+  kernel_sizes: [3, 3, 3]
+  pool_sizes: [2, 2, 2]
+
+# Data Configuration
+data:
+  sequence_length: 60
+  prediction_horizon: 1
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  
+  # Feature engineering
+  features:
+    technical_indicators: true
+    price_features: true
+    volume_features: true
+    sentiment_features: true
+  
+  # Data preprocessing
+  scaling:
+    method: "robust"  # Options: standard, minmax, robust
+    feature_range: [-1, 1]
+  
+  # Class balancing
+  balance_classes: true
+  balance_method: "smote"  # Options: smote, random_undersample, random_oversample
+
+# Enhanced Experiment Management Configuration
+experiment:
+  # Basic experiment info
+  name: "enhanced_mlp_trading_model"
+  description: "MLP model with enhanced experiment tracking and comprehensive feature engineering"
+  
+  # Experiment tags for organization
+  tags:
+    model_family: "neural_network"
+    architecture: "mlp"
+    version: "2.0"
+    experiment_type: "training"
+    data_version: "v1.2"
+    feature_set: "comprehensive"
+    author: "flow-code"
+    
+  # Experiment metadata
+  metadata:
+    project: "TradingBotAI"
+    phase: "model_development"
+    objective: "maximize_f1_score"
+    baseline_model: "random_forest_v1"
+    
+  # MLflow configuration
+  mlflow:
+    tracking_uri: "sqlite:///mlruns.db"
+    experiment_name: "TradingBot_Enhanced_Models"
+    run_name_template: "{model_type}_{timestamp}"
+    
+  # Enhanced logging options
+  logging:
+    log_model_summary: true
+    log_feature_importance: true
+    log_confusion_matrix: true
+    log_classification_report: true
+    log_learning_curves: true
+    log_hyperparameters: true
+    log_system_metrics: true
+    log_data_statistics: true
+    
+    # Artifact logging
+    artifacts:
+      save_model_state: true
+      save_optimizer_state: true
+      save_scaler: true
+      save_predictions: true
+      save_feature_names: true
+      
+  # Reporting configuration
+  reporting:
+    generate_html_report: true
+    generate_pdf_report: false
+    include_visualizations: true
+    include_model_analysis: true
+    include_performance_metrics: true
+
+# Hyperparameter Optimization Configuration
+hpo:
+  # Basic HPO settings
+  n_trials: 100
+  direction: "maximize"
+  target_metric: "validation_f1_score_positive_class"
+  
+  # Optuna configuration
+  study_name: "mlp_hpo_study"
+  storage: "sqlite:///hpo_studies.db"
+  load_if_exists: true
+  
+  # Sampler configuration
+  sampler:
+    type: "TPESampler"
+    n_startup_trials: 10
+    n_ei_candidates: 24
+    seed: 42
+    
+  # Pruner configuration
+  pruner:
+    type: "MedianPruner"
+    n_startup_trials: 5
+    n_warmup_steps: 10
+    interval_steps: 1
+    
+  # Search space configuration (will be merged with model-specific spaces)
+  search_space:
+    training:
+      learning_rate:
+        type: "log_uniform"
+        low: 0.00001
+        high: 0.01
+      batch_size:
+        type: "categorical"
+        choices: [128, 256, 512, 1024]
+      weight_decay:
+        type: "log_uniform"
+        low: 0.00001
+        high: 0.001
+        
+    model:
+      dropout:
+        type: "uniform"
+        low: 0.1
+        high: 0.5
+        
+  # Progress tracking
+  progress:
+    show_progress_bar: true
+    log_every_n_trials: 10
+    save_intermediate_results: true
+    
+  # Early stopping for HPO
+  early_stopping:
+    enabled: true
+    min_trials: 20
+    patience: 15
+    min_improvement: 0.001
+
+# Model Evaluation Configuration
+evaluation:
+  # Metrics to compute
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "f1_score_positive_class"
+    - "auc_roc"
+    - "confusion_matrix"
+    - "classification_report"
+    
+  # Cross-validation
+  cross_validation:
+    enabled: false
+    n_folds: 5
+    stratified: true
+    shuffle: true
+    random_state: 42
+    
+  # Test set evaluation
+  test_evaluation:
+    enabled: true
+    save_predictions: true
+    generate_reports: true
+
+# System Configuration
+system:
+  # Device configuration
+  device: "auto"  # Options: auto, cpu, cuda
+  cuda_device: 0
+  
+  # Memory management
+  memory:
+    clear_cache_every_epoch: true
+    pin_memory: true
+    
+  # Reproducibility
+  random_seed: 42
+  deterministic: true
+  benchmark: false
+  
+  # Logging
+  log_level: "INFO"
+  log_to_file: true
+  log_file: "training.log"
+  
+  # Output directories
+  output_dir: "outputs"
+  model_dir: "models"
+  results_dir: "results"
+  logs_dir: "logs"
+  
+  # Checkpointing
+  checkpoint:
+    enabled: true
+    save_every_n_epochs: 10
+    save_best_only: true
+    monitor: "validation_f1_score_positive_class"
+    mode: "max"
+
+# Data Validation Configuration
+data_validation:
+  # Input validation
+  validate_inputs: true
+  check_missing_values: true
+  check_data_types: true
+  check_value_ranges: true
+  
+  # Feature validation
+  validate_features: true
+  min_feature_count: 10
+  max_feature_count: 1000
+  
+  # Target validation
+  validate_targets: true
+  check_class_distribution: true
+  min_samples_per_class: 100
+  
+  # Data quality checks
+  quality_checks:
+    check_duplicates: true
+    check_outliers: true
+    outlier_method: "isolation_forest"
+    outlier_threshold: 0.1

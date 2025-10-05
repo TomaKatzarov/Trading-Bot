@@ -1,0 +1,96 @@
+# HPO Configuration Example
+# This file demonstrates how to configure hyperparameter optimization studies
+
+# Study configuration
+study_name: "nn_hpo_comprehensive_study"
+sampler: "tpe"  # Options: 'tpe', 'random'
+pruner: "median"  # Options: 'median', 'hyperband', null
+n_trials: 50  # Number of trials per model type
+target_metric: "validation_f1_score_positive_class"  # Metric to optimize
+direction: "maximize"  # 'maximize' or 'minimize'
+output_dir: "hpo_results"
+
+# Models to optimize (comment out models you don't want to optimize)
+models_to_optimize:
+  - "mlp"
+  - "lstm" 
+  - "gru"
+  - "cnn_lstm"
+
+# Storage configuration (optional)
+# storage_url: "postgresql://user:pass@localhost/optuna"  # For distributed HPO
+# storage_url: null  # Will auto-generate SQLite database
+
+# Advanced HPO settings
+advanced_settings:
+  # Pruning configuration
+  pruning:
+    n_startup_trials: 5  # Number of trials before pruning starts
+    n_warmup_steps: 10   # Number of steps before pruning evaluation
+  
+  # Sampler configuration
+  sampler_config:
+    seed: 42
+    n_startup_trials: 10  # For TPE sampler
+  
+  # Parallel execution (if using distributed storage)
+  n_jobs: 1  # Number of parallel workers
+  
+  # Timeout settings
+  timeout: null  # Maximum time in seconds (null = no timeout)
+  
+# Custom search space overrides (optional)
+# Use this to override default search spaces for specific parameters
+custom_search_spaces:
+  # Common parameters (applied to all models)
+  common:
+    learning_rate:
+      type: "log_uniform"
+      low: 5e-5
+      high: 5e-3
+    batch_size:
+      type: "categorical"
+      choices: [32, 64, 128]
+    early_stopping_patience:
+      type: "int"
+      low: 10
+      high: 20
+  
+  # Model-specific overrides
+  lstm:
+    lstm_hidden_dim:
+      type: "int"
+      low: 64
+      high: 256
+      step: 32
+    attention_dim:
+      type: "int" 
+      low: 32
+      high: 128
+      step: 16
+  
+  mlp:
+    hidden_layers:
+      type: "int"
+      low: 2
+      high: 3
+    hidden_dim_1:
+      type: "int"
+      low: 128
+      high: 512
+      step: 64
+
+# MLflow integration
+mlflow:
+  experiment_name: "HPO_Comprehensive_Study"
+  tracking_uri: null  # Use default MLflow tracking
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  log_file: "hpo_study.log"
+  
+# Resource management
+resources:
+  gpu_memory_fraction: 0.9  # Fraction of GPU memory to use
+  max_trials_per_gpu: 1     # Maximum concurrent trials per GPU
