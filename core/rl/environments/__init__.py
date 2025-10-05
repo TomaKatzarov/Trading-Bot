@@ -2,6 +2,7 @@
 
 from .feature_extractor import FeatureConfig, FeatureExtractor
 from .regime_indicators import RegimeIndicators
+from .portfolio_manager import PortfolioConfig, PortfolioManager, Position
 from .reward_shaper import RewardConfig, RewardShaper
 
 try:  # pragma: no cover - optional dependency on gymnasium
@@ -14,6 +15,9 @@ __all__ = [
     "FeatureExtractor",
     "FeatureConfig",
     "RegimeIndicators",
+    "PortfolioManager",
+    "PortfolioConfig",
+    "Position",
     "RewardShaper",
     "RewardConfig",
 ]

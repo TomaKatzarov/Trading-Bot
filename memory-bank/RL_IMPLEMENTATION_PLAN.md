@@ -229,6 +229,23 @@ Each phase includes detailed tasks, dependencies, resources, success criteria, q
 	- Script: `scripts/analyze_reward_signals.py`
 	- Features: Component stats, balance checks, SNR & correlation analysis, visualization export
 	- Usage: `python scripts/analyze_reward_signals.py --episode-data <json>` (run inside RL env for matplotlib)
+- [x] 1.4.1: ✅ PortfolioManager class created (2025-10-05)
+	- File: `core/rl/environments/portfolio_manager.py`
+	- Features: Position lifecycle analytics, capital management, Sharpe/Sortino computation, drawdown tracking
+	- Risk controls: Position size & leverage checks, auto-closure on position/portfolio loss limits, reserve capital compliance
+	- Capital management: Reserve buffer enforcement, margin requirement handling, exposure/leverage reporting for downstream agents
+- [x] 1.4.2: ✅ Portfolio manager test suite (2025-10-05)
+	- File: `tests/test_portfolio_manager.py`
+	- Coverage: Position lifecycle flows, risk limit enforcement, capital allocation, analytics integrity, edge-case resilience
+	- Status: 25+ pytest cases ensuring PortfolioManager and Position behave under normal and stress conditions
+- [x] 1.4.3: ✅ TradingEnvironment integrated with PortfolioManager (2025-10-05)
+	- Modified: `core/rl/environments/trading_env.py` to delegate capital, exposure, risk enforcement, and analytics to PortfolioManager
+	- Observations now expose portfolio metrics (equity, exposure, Sharpe/Sortino, realized PnL); info payload mirrors new analytics for monitoring hooks
+	- Tests: `pytest tests/test_portfolio_manager.py tests/test_trading_env.py` passing in `.venv` (38 total cases) after updating `tests/test_trading_env.py` to assert portfolio-driven behavior
+- [x] 1.4.4: ✅ Performance monitoring dashboard (2025-10-05)
+	- Script: `scripts/monitor_environment_performance.py` generates plots, JSON summaries, CSV exports, and human-readable reports from episode rollouts
+	- Analyses: action diversity, reward quality, portfolio KPIs (Sharpe/Sortino, drawdowns), position lifecycle statistics, risk-event breakdowns
+	- Outputs: `dashboard.png`, `rewards.png`, `performance_report.txt`, `statistics.json`, optional `timelines.csv` for downstream aggregation
 - **Task 1.2 Summary:** Feature engineering stack (FeatureExtractor + RegimeIndicators + SL prob integration) fully operational, benchmarks validated, and environment wiring complete with all unit tests green (`python -m pytest tests/test_feature_extractor.py tests/test_trading_env.py`).
 
 > Implementation located at `core/rl/environments/trading_env.py` with:

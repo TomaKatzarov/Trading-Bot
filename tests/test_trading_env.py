@@ -95,9 +95,9 @@ def test_reset_provides_expected_shapes(make_parquet):
 
     assert info["position"] is None
     assert "timestamp" in info and info["timestamp"].endswith("+00:00")
-    assert env.config.stop_loss == pytest.approx(0.03)
-    assert env.config.take_profit == pytest.approx(0.015)
-    assert env.config.max_hold_hours == 24
+    assert env.config.stop_loss == pytest.approx(0.02)
+    assert env.config.take_profit == pytest.approx(0.025)
+    assert env.config.max_hold_hours == 8
 
 
 def test_buy_and_sell_cycle_updates_portfolio(make_parquet):
@@ -115,14 +115,14 @@ def test_buy_and_sell_cycle_updates_portfolio(make_parquet):
 
     _, reward, terminated, truncated, info = env.step(TradeAction.BUY_MEDIUM.value)
     assert info["action_executed"] is True
-    assert env.position is not None
+    assert env.portfolio.positions.get("TEST") is not None
     assert not terminated and not truncated
 
     _, reward, terminated, truncated, info = env.step(TradeAction.SELL_ALL.value)
-    assert info["action_info"].get("closed") is True
-    assert info["action_info"].get("trigger") == "SELL_ALL"
-    assert env.position is None
-    assert env.cash >= config.initial_capital  # profited from price jump
+    assert info["position_closed"] is not None
+    assert info["position_closed"].get("trigger") == "agent_full_close"
+    assert env.portfolio.positions.get("TEST") is None
+    assert env.portfolio.get_equity() >= config.initial_capital  # profited from price jump
 
 
 def test_stop_loss_triggers_on_price_drawdown(make_parquet):
@@ -144,7 +144,7 @@ def test_stop_loss_triggers_on_price_drawdown(make_parquet):
     _, reward, terminated, truncated, info = env.step(TradeAction.HOLD.value)
 
     assert info["position_closed"] is not None
-    assert info["position_closed"]["trigger"] == "STOP_LOSS"
-    assert info["position_closed"]["pnl"] < 0
-    assert env.position is None
+    assert info["position_closed"]["trigger"] == "stop_loss"
+    assert info["position_closed"]["realized_pnl"] < 0
+    assert env.portfolio.positions.get("TEST") is None
     assert not terminated  # episode continues even after stop loss

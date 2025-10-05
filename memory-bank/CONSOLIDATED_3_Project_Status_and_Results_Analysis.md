@@ -87,6 +87,7 @@ Phase 6: Production Deployment              🔜 ON HOLD
 **Phase 1 Progress Snapshot (October 5, 2025):**
 - Task 1.2 ✅ Feature engineering stack (`FeatureExtractor`, `RegimeIndicators`) wired into `TradingEnvironment`, benchmarked at P95 < 2 ms with cache warm, and regression suite (`tests/test_feature_extractor.py`, `tests/test_trading_env.py`) green in `.venv`.
 - **Task 1.3 ✅ Reward function overhaul:** Introduced `RewardShaper` with seven components (PnL, cost, time, Sharpe, drawdown, sizing, optional hold penalty), comprehensive unit coverage (`tests/test_reward_shaper.py`), integration into `TradingEnvironment` with per-step component analytics, and reward signal diagnostics via `scripts/analyze_reward_signals.py`. Full suite passes inside `trading_rl_env` with Gymnasium dependencies.
+- **Task 1.4 ✅ Portfolio state management and monitoring:** `PortfolioManager` now drives all position/cash bookkeeping within `TradingEnvironment`, enforcing size/drawdown limits automatically and exposing rich telemetry through the observation/info dicts. Comprehensive unit/regression coverage (`tests/test_portfolio_manager.py`, `tests/test_trading_env.py`) plus the new `scripts/monitor_environment_performance.py` dashboard provide action/reward/portfolio diagnostics; Task 1.4 deliverables are documented in `memory-bank/RL_IMPLEMENTATION_PLAN.md`.
 
 ---
 

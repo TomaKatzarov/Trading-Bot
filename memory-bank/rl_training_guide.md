@@ -89,6 +89,7 @@ python scripts/test_gpu_rl_readiness.py
 3. **Reward Coefficient Calibration**
    - Conduct grid search on reward coefficients; log contributions in MLflow to ensure no single component dominates (>60%).
    - After each calibration run, export episode traces (`reward_shaper.component_history`) and invoke `python scripts/analyze_reward_signals.py --episode-data <path>` to confirm healthy component balance and signal-to-noise levels.
+   - Generate post-run diagnostics with `python scripts/monitor_environment_performance.py --episode-data <episode.json> --output-dir analysis/environment/<run>` to inspect action diversity, reward quality, portfolio KPIs, and risk events; archive the resulting `performance_report.txt` alongside MLflow artifacts.
 
 ## Phase 2: Symbol Agent Training (PPO)
 

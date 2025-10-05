@@ -1,9 +1,8 @@
 """Gymnasium-compatible trading environment for RL agent training."""
 from __future__ import annotations
 
-import math
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -15,6 +14,7 @@ from gymnasium import spaces
 from gymnasium.utils import seeding
 
 from .feature_extractor import FeatureConfig, FeatureExtractor
+from .portfolio_manager import PortfolioConfig, PortfolioManager
 from .regime_indicators import RegimeIndicators
 from .reward_shaper import RewardConfig, RewardShaper
 
@@ -22,77 +22,60 @@ try:  # pragma: no cover - import guard
     from scripts.sl_checkpoint_utils import load_sl_checkpoint  # type: ignore
 except ImportError:  # pragma: no cover - graceful degradation when utilities unavailable
     load_sl_checkpoint = None
+
 logger = logging.getLogger(__name__)
 
-# Configuration & Data Structures
 
 @dataclass
 class TradingConfig:
-    """Configuration for trading environment"""
+    """Configuration for trading environment."""
 
     symbol: str
     data_path: Path
     sl_checkpoints: Dict[str, Path]
 
+    # Preferred configuration path
+    portfolio_config: Optional[PortfolioConfig] = None
+
+    # Legacy parameters (used when portfolio_config is not supplied)
     initial_capital: float = 100_000.0
-    max_position_size: float = 0.10  # 10% of capital
-    max_positions: int = 1  # Single symbol = 1 max
+    commission_rate: float = 0.001
+    slippage_bps: float = 5.0
+    stop_loss: float = 0.02
+    take_profit: float = 0.025
+    max_hold_hours: int = 8
 
-    commission_rate: float = 0.001  # 0.1%
-    slippage_bps: float = 5.0  # 5 basis points
-
-    stop_loss: float = 0.03  # 3%
-    take_profit: float = 0.015  # 1.5%
-    max_hold_hours: int = 24
-
+    # Environment settings
     lookback_window: int = 24
-    episode_length: int = 1000  # Max steps per episode
+    episode_length: int = 1000
+    train_start: Optional[str] = None
+    train_end: Optional[str] = None
+    val_start: Optional[str] = None
+    val_end: Optional[str] = None
 
-    train_start: Optional[str] = None  # '2023-10-02'
-    train_end: Optional[str] = None  # '2025-05-01'
-    val_start: Optional[str] = None  # '2025-05-01'
-    val_end: Optional[str] = None  # '2025-08-01'
+    # Reward configuration
+    reward_config: Optional[RewardConfig] = None
 
-    reward_scaling: float = 1.0
-    equity_reward_weight: float = 0.6
-    drawdown_penalty_weight: float = 0.2
-    action_regularization_weight: float = 0.1
-    risk_overshoot_penalty: float = 0.1
-    bankruptcy_penalty: float = 10.0
-
-    min_cash_reserve: float = 100.0
-    epsilon: float = 1e-8
-
+    # Logging / diagnostics
     log_trades: bool = True
     log_level: int = logging.INFO
 
-    reward_config: Optional[RewardConfig] = None
+    def get_portfolio_config(self) -> PortfolioConfig:
+        """Materialize a :class:`PortfolioConfig` from legacy settings."""
 
-@dataclass
-class PositionState:
-    """Represents an open trading position."""
+        if self.portfolio_config is not None:
+            return self.portfolio_config
 
-    shares: float
-    entry_price: float
-    entry_step: int
-    cost_basis: float
-    entry_equity: float
+        config = PortfolioConfig(
+            initial_capital=self.initial_capital,
+            commission_rate=self.commission_rate,
+            slippage_bps=self.slippage_bps,
+            max_position_size_pct=0.10,
+            max_total_exposure_pct=1.0,
+            max_positions=1,
+        )
+        return config
 
-@dataclass
-class TradeEvent:
-    """Record describing a trade executed within the environment."""
-
-    step: int
-    action: str
-    price: float
-    shares: float
-    timestamp: pd.Timestamp
-    proceeds: Optional[float] = None
-    cost: Optional[float] = None
-    pnl: Optional[float] = None
-    pnl_pct: Optional[float] = None
-    holding_hours: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class RewardBreakdown:
@@ -103,6 +86,8 @@ class RewardBreakdown:
     action: float = 0.0
     risk: float = 0.0
     total: float = 0.0
+
+
 class TradeAction(IntEnum):
     """Enumeration matching discrete action space semantics."""
 
@@ -114,7 +99,6 @@ class TradeAction(IntEnum):
     SELL_ALL = 5
     ADD_POSITION = 6
 
-# Utility helpers
 
 def _safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
     """Avoid division by zero returning ``default`` when denominator is ~0."""
@@ -123,34 +107,15 @@ def _safe_divide(numerator: float, denominator: float, default: float = 0.0) -> 
         return default
     return numerator / denominator
 
+
 def _clip01(value: float) -> float:
     return float(max(0.0, min(1.0, value)))
 
-def _compute_drawdown(equity_curve: Iterable[float]) -> Tuple[float, float]:
-    """Compute max drawdown and current drawdown from equity sequence."""
-
-    peak = -math.inf
-    max_dd = 0.0
-    current_dd = 0.0
-    for value in equity_curve:
-        if value > peak:
-            peak = value
-            current_dd = 0.0
-            continue
-        dd = _safe_divide(peak - value, peak, 0.0)
-        current_dd = dd
-        if dd > max_dd:
-            max_dd = dd
-    if peak == -math.inf:
-        peak = 0.0
-    return max_dd, current_dd
 
 def _timestamp_str(ts: pd.Timestamp) -> str:
     if pd.isna(ts):
         return "NaT"
     return ts.isoformat()
-
-# Trading Environment
 
 class TradingEnvironment(gym.Env):
     """Production-grade single-symbol trading environment for Gymnasium."""
@@ -177,58 +142,47 @@ class TradingEnvironment(gym.Env):
     SL_MODEL_ORDER: Tuple[str, ...] = ("mlp", "lstm", "gru")
 
     def __init__(self, config: TradingConfig, seed: Optional[int] = None):
-        """Initialize environment with configuration"""
-
         super().__init__()
         self.config = config
         self.render_mode = None
         self._np_random = None
 
-        # Configure logging early
         if not logger.handlers:
             logging.basicConfig(level=config.log_level)
         else:
             logger.setLevel(config.log_level)
 
         self.sl_models: Dict[str, Any] = {}
-        self.feature_extractor: FeatureExtractor | None = None
-        self.regime_indicators: RegimeIndicators | None = None
+        self.feature_extractor: Optional[FeatureExtractor] = None
+        self.regime_indicators: Optional[RegimeIndicators] = None
         self.feature_cols: List[str] = []
         self.regime_feature_names: List[str] = []
 
         reward_config = config.reward_config or RewardConfig()
         self.reward_shaper = RewardShaper(reward_config)
-        self.peak_equity = config.initial_capital
-        logger.info(
-            "TradingEnvironment initialized for %s with reward weights: PnL=%.2f, Cost=%.2f",
-            config.symbol,
-            reward_config.pnl_weight,
-            reward_config.transaction_cost_weight,
-        )
+        self.portfolio = PortfolioManager(config.get_portfolio_config())
 
         self._load_data()
         self._load_sl_models()
         self._define_spaces()
 
-        # State variables
         self.current_step: int = 0
         self.episode_step: int = 0
-        self.cash: float = config.initial_capital
-        self.position: Optional[PositionState] = None
-        self.trades: List[TradeEvent] = []
-        self.equity_curve: List[float] = []
-        self.max_equity: float = config.initial_capital
-        self.min_equity: float = config.initial_capital
-        self.max_drawdown: float = 0.0
-        self.current_drawdown: float = 0.0
         self.last_action: TradeAction = TradeAction.HOLD
+        self.equity_curve: List[float] = []
         self._last_reward: RewardBreakdown = RewardBreakdown()
-        self._portfolio_cache: Optional[np.ndarray] = None
+        self._last_closed_trade: Optional[Dict[str, Any]] = None
 
         if seed is not None:
             self.seed(seed)
         else:
             self.seed()
+
+        logger.info(
+            "TradingEnvironment initialized for %s with PortfolioManager (capital=$%s)",
+            config.symbol,
+            f"{self.portfolio.config.initial_capital:,.0f}",
+        )
 
     # Gymnasium API
 
@@ -258,20 +212,13 @@ class TradingEnvironment(gym.Env):
         if seed is not None:
             self.seed(seed)
 
-        self.cash = float(self.config.initial_capital)
-        self.position = None
-        self.trades = []
-        self.equity_curve = []
-        self.max_equity = self.config.initial_capital
-        self.min_equity = self.config.initial_capital
-        self.max_drawdown = 0.0
-        self.current_drawdown = 0.0
+        self.portfolio.reset()
+        self.reward_shaper.reset_episode()
         self.episode_step = 0
         self.last_action = TradeAction.HOLD
         self._last_reward = RewardBreakdown()
-        self._portfolio_cache = None
-        self.reward_shaper.reset_episode()
-        self.peak_equity = self.config.initial_capital
+        self._last_closed_trade = None
+        self.equity_curve = []
 
         if options and "start_idx" in options:
             start_idx = int(options["start_idx"])
@@ -283,6 +230,7 @@ class TradingEnvironment(gym.Env):
             start_idx = int(self._np_random.integers(valid_start, valid_end))
 
         self.current_step = start_idx
+        self._mark_to_market_current()
         observation = self._get_observation()
         info = self._get_info()
         logger.debug("Environment reset at step %s", self.current_step)
@@ -306,27 +254,33 @@ class TradingEnvironment(gym.Env):
         if not self.action_space.contains(int(action)):
             raise gym.error.InvalidAction(f"Action {action} outside action space")
 
-        prev_equity = self._calculate_equity()
+        prev_equity = self.portfolio.get_equity()
         self.last_action = TradeAction(int(action))
-        action_executed, action_info = self._execute_action(self.last_action)
-        position_close_event = self._update_position()
-        position_closed = bool(action_info.get("closed")) or bool(position_close_event)
+        action_executed, action_info = self._execute_action(int(action))
+        forced_trades = self._update_position()
+        if forced_trades:
+            action_info.setdefault("forced_trades", forced_trades)
+
+        position_closed_info: Optional[Dict[str, Any]] = None
+        if action_info.get("trade") is not None:
+            position_closed_info = action_info["trade"]
+        if forced_trades:
+            position_closed_info = forced_trades[0]
 
         self.current_step += 1
         self.episode_step += 1
+        if self.current_step >= len(self.data):
+            self.current_step = len(self.data) - 1
 
-        current_equity = self._calculate_equity()
-        self.equity_curve.append(current_equity)
-        self.max_equity = max(self.max_equity, current_equity)
-        self.min_equity = min(self.min_equity, current_equity)
-        self.max_drawdown, self.current_drawdown = _compute_drawdown(self.equity_curve)
+        self._mark_to_market_current()
+        current_equity = self.portfolio.get_equity()
 
         reward = self._compute_reward(
             action=self.last_action,
             action_executed=action_executed,
             prev_equity=prev_equity,
             current_equity=current_equity,
-            position_closed=position_closed,
+            position_closed=position_closed_info is not None,
         )
 
         terminated = False
@@ -336,14 +290,12 @@ class TradingEnvironment(gym.Env):
             truncated = True
         if self.current_step >= len(self.data) - 1:
             terminated = True
-        if current_equity <= self.config.initial_capital * 0.5:
+        if current_equity <= self.portfolio.config.initial_capital * 0.5:
             terminated = True
-            reward -= self.config.bankruptcy_penalty
-            self._last_reward.risk -= self.config.bankruptcy_penalty
             logger.warning(
                 "Bankruptcy condition triggered: equity %.2f <= %.2f",
                 current_equity,
-                self.config.initial_capital * 0.5,
+                self.portfolio.config.initial_capital * 0.5,
             )
 
         observation = self._get_observation()
@@ -352,18 +304,20 @@ class TradingEnvironment(gym.Env):
             {
                 "action_executed": bool(action_executed),
                 "action_info": action_info,
-                "position_closed": position_close_event or (action_info if action_info.get("closed") else None),
+                "position_closed": position_closed_info,
                 "equity": current_equity,
                 "reward_breakdown": self._last_reward.__dict__.copy(),
             }
         )
+        self._last_closed_trade = position_closed_info
 
         if terminated or truncated:
+            metrics = self.portfolio.get_portfolio_metrics()
             info["episode"] = {
-                "r": float(sum(self.equity_curve) - len(self.equity_curve) * self.config.initial_capital),
+                "r": float(metrics["total_pnl"]),
                 "l": int(self.episode_step),
                 "equity_final": float(current_equity),
-                "max_drawdown": float(self.max_drawdown),
+                "max_drawdown": float(metrics["max_drawdown"]),
             }
 
         if self.render_mode == "human":
@@ -382,15 +336,14 @@ class TradingEnvironment(gym.Env):
         return None
 
     def close(self) -> None:
-        self.position = None
-        self.trades.clear()
+        self.portfolio.reset()
 
     # Data Loading and Initialization
 
     def _load_data(self) -> None:
         """Load historical data and initialize feature extraction"""
 
-        logger.info(f"Loading data for {self.config.symbol}")
+        logger.info("Loading data for %s", self.config.symbol)
 
         if not self.config.data_path.exists():
             raise FileNotFoundError(f"Data path {self.config.data_path} does not exist")
@@ -478,6 +431,7 @@ class TradingEnvironment(gym.Env):
         lookback = self.config.lookback_window
         num_features = self.feature_extractor.get_feature_count() if self.feature_extractor else 0
         regime_dim = len(self.regime_feature_names) if self.regime_feature_names else 10
+        portfolio_cfg = self.portfolio.config
 
         self.observation_space = spaces.Dict(
             {
@@ -496,17 +450,33 @@ class TradingEnvironment(gym.Env):
                 "position": spaces.Box(
                     low=np.array([0.0, 0.0, -1.0, 0.0, 0.0], dtype=np.float32),
                     high=np.array([
-                        1.0, np.finfo(np.float32).max, 1.0,
+                        1.0,
+                        np.finfo(np.float32).max,
+                        1.0,
                         float(self.config.max_hold_hours) + 1.0,
-                        float(self.config.max_position_size) + 0.01,
+                        float(portfolio_cfg.max_position_size_pct) + 0.05,
                     ], dtype=np.float32),
                     dtype=np.float32,
                 ),
                 "portfolio": spaces.Box(
-                    low=np.array([0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0], dtype=np.float32),
+                    low=np.array([
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        -1.0,
+                        -10.0,
+                        -10.0,
+                        -np.finfo(np.float32).max,
+                    ], dtype=np.float32),
                     high=np.array([
-                        np.finfo(np.float32).max, np.finfo(np.float32).max, 1.0,
-                        float(self.config.max_positions), 1.0, 1.0, 1.0,
+                        np.finfo(np.float32).max,
+                        np.finfo(np.float32).max,
+                        1.0,
+                        float(portfolio_cfg.max_positions),
+                        1.0,
+                        np.finfo(np.float32).max,
+                        np.finfo(np.float32).max,
                         np.finfo(np.float32).max,
                     ], dtype=np.float32),
                     dtype=np.float32,
@@ -532,8 +502,6 @@ class TradingEnvironment(gym.Env):
 
         if self.feature_extractor is None or self.regime_indicators is None:
             raise RuntimeError("Feature pipeline not initialized")
-
-        self._portfolio_cache = None
 
         technical_features = self.feature_extractor.extract_window(
             self.current_step,
@@ -564,83 +532,65 @@ class TradingEnvironment(gym.Env):
         }
 
     def _get_position_state(self) -> np.ndarray:
-        if self.position is None:
-            state = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
-            return state
+        position = self.portfolio.positions.get(self.config.symbol)
+        if position is None:
+            return np.zeros(5, dtype=np.float32)
 
-        current_price = float(self.data.loc[self.current_step, "close"])
-        position_value = self.position.shares * current_price
-        unrealized_pnl = position_value - self.position.cost_basis
-        duration = float(self.current_step - self.position.entry_step)
-        size_pct = _safe_divide(position_value, self._calculate_equity(), 0.0)
-
-        state = np.array(
+        equity = self.portfolio.get_equity()
+        size_pct = _safe_divide(position.current_value, equity, 0.0)
+        return np.array(
             [
                 1.0,
-                float(self.position.entry_price),
-                float(_safe_divide(unrealized_pnl, max(self.position.cost_basis, self.config.epsilon), 0.0)),
-                duration,
-                size_pct,
+                float(position.entry_price),
+                float(position.unrealized_pnl_pct),
+                float(position.get_holding_period(self.current_step)),
+                float(size_pct),
             ],
             dtype=np.float32,
         )
-        return state
 
     def _get_portfolio_state(self) -> np.ndarray:
-        if self._portfolio_cache is not None:
-            return self._portfolio_cache
-
-        equity = self._calculate_equity()
-        position_count = 1 if self.position is not None else 0
-        deployed_pct = _safe_divide(equity - self.cash, equity, 0.0)
-        realized_pnl = self._calculate_realized_pnl()
-        pct_change = _safe_divide(equity - self.config.initial_capital, self.config.initial_capital, 0.0)
-        max_dd = float(self.max_drawdown)
-        current_dd = float(self.current_drawdown)
-
-        state = np.array(
+        metrics = self.portfolio.get_portfolio_metrics()
+        return np.array(
             [
-                float(equity),
-                float(self.cash),
-                float(deployed_pct),
-                float(position_count),
-                float(_clip01(pct_change + 0.5)),
-                float(max_dd),
-                float(current_dd),
-                float(realized_pnl),
+                float(metrics["equity"]),
+                float(metrics["cash"]),
+                float(metrics["exposure_pct"]),
+                float(metrics["num_positions"]),
+                float(metrics["total_return"]),
+                float(metrics["sharpe_ratio"]),
+                float(metrics["sortino_ratio"]),
+                float(metrics["total_pnl"]),
             ],
             dtype=np.float32,
         )
-        self._portfolio_cache = state
-        return state
 
     # Trading Mechanics
 
-    def _execute_action(self, action: TradeAction) -> Tuple[bool, Dict[str, Any]]:
+    def _execute_action(self, action: int) -> Tuple[bool, Dict[str, Any]]:
         current_price = float(self.data.loc[self.current_step, "close"])
-        info: Dict[str, Any] = {"action_name": action.name, "price": current_price}
+        current_time = self.data.loc[self.current_step, "timestamp"].to_pydatetime()
+        info: Dict[str, Any] = {"action_name": self._action_name(action), "price": current_price}
+        symbol = self.config.symbol
+        portfolio_cfg = self.portfolio.config
 
-        # Action 0: HOLD
-        if action == TradeAction.HOLD:
+        trade_action = TradeAction(int(action))
+
+        if trade_action == TradeAction.HOLD:
             return True, info
 
-        # Buy actions
-        if action in (TradeAction.BUY_SMALL, TradeAction.BUY_MEDIUM, TradeAction.BUY_LARGE):
-            if self.position is not None:
+        if trade_action in (TradeAction.BUY_SMALL, TradeAction.BUY_MEDIUM, TradeAction.BUY_LARGE):
+            if symbol in self.portfolio.positions:
                 info["reject_reason"] = "position_exists"
                 return False, info
 
-            sizing_map = {
-                TradeAction.BUY_SMALL: 0.025,
-                TradeAction.BUY_MEDIUM: 0.06,
-                TradeAction.BUY_LARGE: 0.09,
-            }
-            target_pct = sizing_map[action]
-            target_pct = min(target_pct, self.config.max_position_size)
-            target_value = self._calculate_equity() * target_pct
+            sizing_map = {TradeAction.BUY_SMALL: 0.025, TradeAction.BUY_MEDIUM: 0.06, TradeAction.BUY_LARGE: 0.09}
+            target_pct = sizing_map[trade_action]
+            equity = self.portfolio.get_equity()
+            target_value = equity * target_pct
 
-            if target_value > self.cash - self.config.min_cash_reserve:
-                info["reject_reason"] = "insufficient_cash"
+            if target_value <= 0:
+                info["reject_reason"] = "invalid_target"
                 return False, info
 
             shares = target_value / current_price
@@ -648,204 +598,150 @@ class TradingEnvironment(gym.Env):
                 info["reject_reason"] = "zero_shares"
                 return False, info
 
-            entry_price = current_price * (1 + self.config.slippage_bps / 10_000)
-            commission = target_value * self.config.commission_rate
-            slippage_cost = target_value * (self.config.slippage_bps / 10_000)
-            total_cost = target_value + commission + slippage_cost
+            entry_price = current_price * (1 + portfolio_cfg.slippage_bps / 10_000)
+            commission = target_value * portfolio_cfg.commission_rate
+            slippage_cost = target_value * (portfolio_cfg.slippage_bps / 10_000)
 
-            if total_cost > self.cash:
-                info["reject_reason"] = "insufficient_cash"
-                return False, info
-
-            self.position = PositionState(
+            success, position = self.portfolio.open_position(
+                symbol=symbol,
                 shares=shares,
                 entry_price=entry_price,
+                entry_time=current_time,
                 entry_step=self.current_step,
-                cost_basis=total_cost,
-                entry_equity=self._calculate_equity(),
+                commission=commission,
+                slippage=slippage_cost,
             )
-            self.cash -= total_cost
 
-            trade_event = TradeEvent(
-                step=self.current_step,
-                action="BUY",
-                price=entry_price,
-                shares=shares,
-                cost=total_cost,
-                timestamp=self.data.loc[self.current_step, "timestamp"],
-                metadata={"target_pct": float(target_pct)},
-            )
-            self._record_trade(trade_event)
-            info.update({"entry_price": entry_price, "shares": shares, "cost": total_cost})
+            if not success or position is None:
+                info["reject_reason"] = "portfolio_rejected"
+                return False, info
+
+            info.update({"entry_price": entry_price, "shares": shares, "target_pct": target_pct})
             return True, info
 
-        # SELL_PARTIAL
-        if action == TradeAction.SELL_PARTIAL:
-            if self.position is None:
+        if trade_action == TradeAction.SELL_PARTIAL:
+            if symbol not in self.portfolio.positions:
                 info["reject_reason"] = "no_position"
                 return False, info
 
-            shares_to_sell = self.position.shares * 0.5
+            position = self.portfolio.positions[symbol]
+            shares_to_sell = position.shares * 0.5
             if shares_to_sell <= 0:
                 info["reject_reason"] = "zero_shares"
                 return False, info
 
-            current_value = shares_to_sell * current_price
-            commission, slippage_cost, proceeds = self._calculate_transaction_costs(current_value)
+            commission = (shares_to_sell * current_price) * portfolio_cfg.commission_rate
+            slippage_cost = (shares_to_sell * current_price) * (portfolio_cfg.slippage_bps / 10_000)
 
-            pnl = proceeds - self.position.cost_basis * 0.5
-            new_cost_basis = self.position.cost_basis * 0.5
-
-            self.position.shares -= shares_to_sell
-            self.position.cost_basis = new_cost_basis
-            self.cash += proceeds
-
-            trade_event = TradeEvent(
-                step=self.current_step,
-                action="SELL_PARTIAL",
-                price=current_price,
-                shares=shares_to_sell,
-                proceeds=proceeds,
-                pnl=pnl,
-                timestamp=self.data.loc[self.current_step, "timestamp"],
-                metadata={"commission": commission, "slippage_cost": slippage_cost},
+            success, trade = self.portfolio.close_position(
+                symbol=symbol,
+                shares_to_close=shares_to_sell,
+                exit_price=current_price,
+                exit_time=current_time,
+                exit_step=self.current_step,
+                exit_reason="agent_partial_close",
+                commission=commission,
+                slippage=slippage_cost,
             )
-            self._record_trade(trade_event)
-            info.update({"shares_sold": shares_to_sell, "pnl": pnl})
-            return True, info
 
-        # SELL_ALL
-        if action == TradeAction.SELL_ALL:
-            if self.position is None:
+            if success and trade:
+                trade.setdefault("trigger", "agent_partial_close")
+                info["trade"] = trade
+                info["shares_sold"] = shares_to_sell
+            return success, info
+
+        if trade_action == TradeAction.SELL_ALL:
+            if symbol not in self.portfolio.positions:
                 info["reject_reason"] = "no_position"
                 return False, info
 
-            closed_info = self._close_position("SELL_ALL", current_price)
-            info.update(closed_info)
-            return True, info
+            position = self.portfolio.positions[symbol]
+            commission = (position.shares * current_price) * portfolio_cfg.commission_rate
+            slippage_cost = (position.shares * current_price) * (portfolio_cfg.slippage_bps / 10_000)
 
-        # ADD_POSITION
-        if action == TradeAction.ADD_POSITION:
-            if self.position is None:
-                info["reject_reason"] = "no_position"
-                return False, info
-
-            current_pnl_pct = _safe_divide(
-                current_price - self.position.entry_price,
-                self.position.entry_price,
-                0.0,
-            )
-            if current_pnl_pct <= 0:
-                info["reject_reason"] = "position_not_profitable"
-                return False, info
-
-            add_value = self._calculate_equity() * 0.02
-            if add_value > self.cash - self.config.min_cash_reserve:
-                info["reject_reason"] = "insufficient_cash"
-                return False, info
-
-            shares_to_add = add_value / current_price
-            commission, slippage_cost, total_cost = self._calculate_transaction_costs(add_value)
-
-            total_shares = self.position.shares + shares_to_add
-            weighted_entry = (
-                (self.position.shares * self.position.entry_price + shares_to_add * current_price)
-                / total_shares
+            success, trade = self.portfolio.close_position(
+                symbol=symbol,
+                shares_to_close=None,
+                exit_price=current_price,
+                exit_time=current_time,
+                exit_step=self.current_step,
+                exit_reason="agent_full_close",
+                commission=commission,
+                slippage=slippage_cost,
             )
 
-            self.position.shares = total_shares
-            self.position.entry_price = weighted_entry
-            self.position.cost_basis += total_cost
-            self.cash -= total_cost
+            if success and trade:
+                trade.setdefault("trigger", "agent_full_close")
+                trade["closed"] = True
+                info["trade"] = trade
+            return success, info
 
-            trade_event = TradeEvent(
-                step=self.current_step,
-                action="ADD_POSITION",
-                price=current_price,
-                shares=shares_to_add,
-                cost=total_cost,
-                timestamp=self.data.loc[self.current_step, "timestamp"],
-                metadata={"commission": commission, "slippage_cost": slippage_cost},
-            )
-            self._record_trade(trade_event)
-
-            info.update({"shares_added": shares_to_add, "new_avg_entry": weighted_entry})
-            return True, info
+        if trade_action == TradeAction.ADD_POSITION:
+            info["reject_reason"] = "add_not_implemented"
+            return False, info
 
         info["reject_reason"] = "unknown_action"
         return False, info
 
-    def _calculate_transaction_costs(self, notionals: float) -> Tuple[float, float, float]:
-        commission = notionals * self.config.commission_rate
-        slippage_cost = notionals * (self.config.slippage_bps / 10_000)
-        proceeds = notionals - commission - slippage_cost
-        return commission, slippage_cost, proceeds
-
-    def _close_position(self, trigger: str, exit_price: float) -> Dict[str, Any]:
-        if self.position is None:
-            return {"closed": False}
-
-        shares = self.position.shares
-        current_value = shares * exit_price
-        commission, slippage_cost, proceeds = self._calculate_transaction_costs(current_value)
-        pnl = proceeds - self.position.cost_basis
-        pnl_pct = _safe_divide(pnl, self.position.cost_basis, 0.0)
-        holding_hours = self.current_step - self.position.entry_step
-
-        self.cash += proceeds
-        trade_event = TradeEvent(
-            step=self.current_step,
-            action=trigger,
-            price=exit_price,
-            shares=shares,
-            proceeds=proceeds,
-            pnl=pnl,
-            pnl_pct=pnl_pct,
-            holding_hours=holding_hours,
-            timestamp=self.data.loc[self.current_step, "timestamp"],
-            metadata={"commission": commission, "slippage_cost": slippage_cost},
-        )
-        self._record_trade(trade_event)
-        self.position = None
-
-        info = {
-            "closed": True,
-            "pnl": pnl,
-            "pnl_pct": pnl_pct,
-            "holding_hours": holding_hours,
-            "trigger": trigger,
-        }
-        return info
-
-    def _update_position(self) -> Optional[Dict[str, Any]]:
-        if self.position is None:
-            return None
-
+    def _update_position(self) -> List[Dict[str, Any]]:
+        symbol = self.config.symbol
         current_price = float(self.data.loc[self.current_step, "close"])
-        entry_price = self.position.entry_price
-        price_change_pct = _safe_divide(current_price - entry_price, entry_price, 0.0)
+        current_time = self.data.loc[self.current_step, "timestamp"].to_pydatetime()
 
-        if price_change_pct <= -self.config.stop_loss:
-            logger.debug("Stop loss triggered at step %s", self.current_step)
-            return self._close_position("STOP_LOSS", current_price)
+        self._mark_to_market_price(current_price, self.current_step)
 
-        if price_change_pct >= self.config.take_profit:
-            logger.debug("Take profit triggered at step %s", self.current_step)
-            return self._close_position("TAKE_PROFIT", current_price)
+        trades: List[Dict[str, Any]] = []
+        position = self.portfolio.positions.get(symbol)
+        if position is None:
+            return trades
 
-        duration = self.current_step - self.position.entry_step
-        if duration >= self.config.max_hold_hours:
-            logger.debug("Max hold duration reached at step %s", self.current_step)
-            return self._close_position("MAX_HOLD", current_price)
+        def _close(exit_reason: str) -> Optional[Dict[str, Any]]:
+            success, trade = self.portfolio.close_position(
+                symbol=symbol,
+                shares_to_close=None,
+                exit_price=current_price,
+                exit_time=current_time,
+                exit_step=self.current_step,
+                exit_reason=exit_reason,
+            )
+            if success and trade:
+                trade["trigger"] = exit_reason
+                trade["closed"] = True
+                trades.append(trade)
+            return trade if success else None
 
-        equity = self._calculate_equity()
-        position_value = self.position.shares * current_price
-        size_pct = _safe_divide(position_value, equity, 0.0)
-        if size_pct > self.config.max_position_size + 1e-4:
-            logger.debug("Position size exceeded limit at step %s", self.current_step)
-            return self._close_position("SIZE_LIMIT", current_price)
+        if position.unrealized_pnl_pct <= -self.config.stop_loss:
+            logger.debug("Stop-loss triggered at step %s", self.current_step)
+            _close("stop_loss")
+            position = self.portfolio.positions.get(symbol)
+            if position is None:
+                return trades
 
-        return None
+        if position.unrealized_pnl_pct >= self.config.take_profit:
+            logger.debug("Take-profit triggered at step %s", self.current_step)
+            _close("take_profit")
+            position = self.portfolio.positions.get(symbol)
+            if position is None:
+                return trades
+
+        holding_period = position.get_holding_period(self.current_step)
+        if holding_period >= self.config.max_hold_hours:
+            logger.debug("Max hold time reached at step %s", self.current_step)
+            _close("max_hold_time")
+            position = self.portfolio.positions.get(symbol)
+            if position is None:
+                return trades
+
+        risk_trades = self.portfolio.enforce_risk_limits(
+            {symbol: current_price},
+            current_time,
+            self.current_step,
+        )
+        for trade in risk_trades:
+            trade.setdefault("trigger", trade.get("exit_reason", "risk_limit"))
+            trade["closed"] = True
+        trades.extend(risk_trades)
+        return trades
 
     def _compute_reward(
         self,
@@ -856,22 +752,22 @@ class TradingEnvironment(gym.Env):
         position_closed: bool,
     ) -> float:
         position_info = None
-        if self.position is not None:
+        position = self.portfolio.positions.get(self.config.symbol)
+        if position is not None:
             position_info = {
                 "is_open": True,
-                "entry_price": float(self.position.entry_price),
-                "entry_step": int(self.position.entry_step),
-                "duration": self.current_step - self.position.entry_step,
-                "shares": float(self.position.shares),
+                "entry_price": float(position.entry_price),
+                "entry_step": int(position.entry_step),
+                "duration": position.get_holding_period(self.current_step),
+                "shares": float(position.shares),
             }
 
         trade_info = None
-        if position_closed and self.trades:
-            last_trade = self.trades[-1]
+        if position_closed and self._last_closed_trade:
             trade_info = {
-                "pnl_pct": float(last_trade.pnl_pct or 0.0),
-                "holding_hours": float(last_trade.holding_hours or 0.0),
-                "action": last_trade.action,
+                "pnl_pct": float(self._last_closed_trade.get("realized_pnl_pct", 0.0)),
+                "holding_hours": float(self._last_closed_trade.get("holding_period", 0)),
+                "action": self._last_closed_trade.get("exit_reason", self._last_closed_trade.get("trigger", "")),
             }
 
         portfolio_state = self._get_portfolio_state_dict()
@@ -907,69 +803,60 @@ class TradingEnvironment(gym.Env):
         return total_reward
 
     def _get_portfolio_state_dict(self) -> Dict[str, float]:
-        current_equity = self._calculate_equity()
-        self.peak_equity = max(getattr(self, "peak_equity", self.config.initial_capital), current_equity)
-
-        deployed = 0.0
-        if self.position is not None:
-            deployed = float(self.position.shares) * float(self.data.loc[self.current_step, "close"])
-
-        deployed_pct = deployed / current_equity if current_equity > 0 else 0.0
-
-        sharpe = 0.0
-        if len(self.equity_curve) > 20:
-            returns = np.diff(self.equity_curve[-20:]) / self.equity_curve[-21:-1]
-            if len(returns) > 0 and np.std(returns) > 0:
-                sharpe = float(np.mean(returns) / np.std(returns) * np.sqrt(252))
-
+        metrics = self.portfolio.get_portfolio_metrics()
         return {
-            "equity": current_equity,
-            "peak_equity": self.peak_equity,
-            "deployed_pct": deployed_pct,
-            "sharpe_ratio": sharpe,
-            "num_trades": len(self.trades),
+            "equity": metrics["equity"],
+            "peak_equity": metrics["peak_equity"],
+            "deployed_pct": metrics["exposure_pct"],
+            "sharpe_ratio": metrics["sharpe_ratio"],
+            "num_trades": metrics["total_trades"],
         }
 
     # Portfolio Accounting & Diagnostics
 
-    def _calculate_equity(self) -> float:
-        equity = self.cash
-        if self.position is not None:
-            current_price = float(self.data.loc[self.current_step, "close"])
-            equity += self.position.shares * current_price
-        return float(equity)
+    def _mark_to_market_price(self, price: float, step: int) -> None:
+        self.portfolio.update_positions({self.config.symbol: price}, step)
+        self.equity_curve = list(self.portfolio.equity_curve)
 
-    def _calculate_realized_pnl(self) -> float:
-        realized = 0.0
-        for trade in self.trades:
-            if trade.pnl is not None:
-                realized += trade.pnl
-        return realized
+    def _mark_to_market_current(self) -> None:
+        price = float(self.data.loc[self.current_step, "close"])
+        self._mark_to_market_price(price, self.current_step)
 
-    def _get_info(self) -> Dict[str, float]:
+    def _get_info(self) -> Dict[str, Any]:
         timestamp = self.data.loc[self.current_step, "timestamp"]
-        info = {
+        metrics = self.portfolio.get_portfolio_metrics()
+        position = self.portfolio.positions.get(self.config.symbol)
+
+        info: Dict[str, Any] = {
             "step": self.current_step,
             "episode_step": self.episode_step,
             "timestamp": _timestamp_str(timestamp),
-            "cash": float(self.cash),
-            "equity": float(self._calculate_equity()),
-            "max_equity": float(self.max_equity),
-            "min_equity": float(self.min_equity),
-            "max_drawdown": float(self.max_drawdown),
-            "current_drawdown": float(self.current_drawdown),
-            "position": None,
+            "cash": float(metrics["cash"]),
+            "equity": float(metrics["equity"]),
+            "total_return_pct": float(metrics["total_return_pct"]),
+            "sharpe_ratio": float(metrics["sharpe_ratio"]),
+            "sortino_ratio": float(metrics["sortino_ratio"]),
+            "max_drawdown_pct": float(metrics["max_drawdown_pct"]),
+            "win_rate": float(metrics["win_rate"]),
+            "exposure_pct": float(metrics["exposure_pct"]),
+            "num_trades": int(metrics["total_trades"]),
+            "position_open": bool(position is not None),
             "last_action": self.last_action.name,
         }
-        if self.position is not None:
+
+        if position is not None:
             info["position"] = {
-                "shares": float(self.position.shares),
-                "entry_price": float(self.position.entry_price),
-                "entry_step": int(self.position.entry_step),
-                "cost_basis": float(self.position.cost_basis),
+                "shares": float(position.shares),
+                "entry_price": float(position.entry_price),
+                "entry_step": int(position.entry_step),
+                "unrealized_pnl": float(position.unrealized_pnl),
+                "unrealized_pnl_pct": float(position.unrealized_pnl_pct),
             }
+        else:
+            info["position"] = None
+
         if self.config.log_trades:
-            info["trades"] = [trade.__dict__ for trade in self.trades[-5:]]
+            info["recent_trades"] = self.portfolio.get_closed_positions()[-5:]
 
         if self.episode_step > 0:
             reward_stats = self.reward_shaper.get_episode_stats()
@@ -980,17 +867,11 @@ class TradingEnvironment(gym.Env):
 
         return info
 
-    def _record_trade(self, trade_event: TradeEvent) -> None:
-        if not self.config.log_trades:
-            return
-        self.trades.append(trade_event)
-        logger.debug(
-            "Trade executed: %s shares=%.4f price=%.4f pnl=%s",
-            trade_event.action,
-            trade_event.shares,
-            trade_event.price,
-            trade_event.pnl,
-        )
+    def _action_name(self, action: int) -> str:
+        try:
+            return TradeAction(int(action)).name
+        except ValueError:
+            return str(action)
 
     # Rendering (human)
 
@@ -1000,7 +881,7 @@ class TradingEnvironment(gym.Env):
             f"Step {info['episode_step']:04d} (idx {info['step']:06d}) | "
             f"Time {info['timestamp']} | Action {info['last_action']} | "
             f"Equity {info['equity']:.2f} | Cash {info['cash']:.2f} | "
-            f"Drawdown {info['current_drawdown']:.2%} | Position {position_info}",
+            f"Exposure {info['exposure_pct']:.2%} | Position {position_info}",
         )
         if info.get("action_info"):
             print(f"  Action info: {info['action_info']}")
@@ -1011,11 +892,10 @@ class TradingEnvironment(gym.Env):
                 "action: {action:.6f}, risk: {risk:.6f}".format(**rb)
             )
 
+
 __all__ = [
     "TradingConfig",
     "TradingEnvironment",
     "TradeAction",
-    "PositionState",
-    "TradeEvent",
     "RewardBreakdown",
 ]
