@@ -444,48 +444,70 @@ The shared transformer encoder is fully validated and production-ready:
 
 **Status:** ✅ Feature Encoder foundation COMPLETE — proceed to Task 2.2 (Symbol Agent implementation).
 
-**Task 2.2: Symbol Agent Policy Network (4 days)**
-- [ ] 2.2.1: Actor-critic architecture implementation
-  - File: `core/rl/policies/symbol_agent.py`
-  - Components: SymbolAgent, ActionMasker, SymbolAgentConfig
-  - Actor: 256→128→7 (action logits)
-  - Critic: 256→128→1 (state value)
-  - Features: Action masking, PPO interface, parameter counting
-- [ ] 2.2.2: Symbol agent test suite
-  - File: `tests/test_symbol_agent.py`
-  - Tests: Forward pass, action masking, parameter count, shared encoder
-  - Target: 8+ test cases, <10M parameters per agent
-- [ ] 2.2.3: PPO compatibility validation
-  - Methods: forward(), evaluate_actions(), get_value()
-  - Interface: Compatible with Stable-Baselines3 PPO
-  - Validation: Dummy rollout execution
+**Task 2.2: Symbol Agent Policy Network ✅ (4 days) - COMPLETE**
+
+**Completion Date:** 2025-10-06
+
+**Subtasks:**
+- [x] 2.2.1: Actor-critic architecture implementation
+	- File: `core/rl/policies/symbol_agent.py` (~310 lines)
+	- Classes: `SymbolAgent`, `SymbolAgentConfig`, `ActionMasker`
+	- Parameter count: 3,305,992 params per agent (shared encoder 3,239,168 + heads 66,824)
+	- Features: Action masking, PPO interface, shared encoder support, orthogonal init
+- [x] 2.2.2: Symbol agent test suite
+	- File: `tests/test_symbol_agent.py` (~200 lines)
+	- Tests: 16 passing (masking, error paths, deterministic path, shared encoder, gradients)
+	- Coverage: 100% line coverage for `core/rl/policies/symbol_agent.py`
+- [x] 2.2.3: PPO compatibility validation
+	- File: `scripts/validate_ppo_interface.py`
+	- Result: ✅ All interface methods validated via dummy rollout
+	- Status: Ready for SB3 integration (action masking verified under exposure constraints)
+
+**Deliverables:**
+- ✅ `core/rl/policies/symbol_agent.py` (actor-critic + masking)
+- ✅ `tests/test_symbol_agent.py` (12 assertions, gradient checks)
+- ✅ `scripts/validate_ppo_interface.py` (PPO smoke test)
+
+**Performance & Scaling:**
+- Parameters per agent (with encoder): 3,305,992 (<10 M target)
+- Actor+critic head: 66,824 params → 12,795,000 total for 143 agents with shared encoder
+- Action masking latency: <0.05 ms/batch in local profiling (boolean ops only)
+
+**Validation Summary:**
+- `pytest tests/test_symbol_agent.py -v --tb=short` → 12 passed
+- `pytest tests/test_symbol_agent.py -v --tb=short` → 16 passed
+- `python -m coverage report -m core/rl/policies/symbol_agent.py` → 100% coverage
+- `python scripts/validate_ppo_interface.py` → All checks green (no masked BUY actions when holding positions)
+
+**Next:** Proceed to Task 2.3 (package exports) and Task 2.4 (initialization module).
 
 **Task 2.3: Package Structure & Exports (1 day)**
-- [ ] 2.3.1: Update package __init__ files
+- [X] 2.3.1: Update package __init__ files
   - Files: `core/rl/policies/__init__.py`, `core/rl/__init__.py`
   - Exports: FeatureEncoder, SymbolAgent, configs, utilities
   - Clean API surface for Phase 3 training
 
 **Task 2.4: Weight Initialization & Transfer (1 day) - CRITICAL ✅**
-- [ ] 2.4.1: Core initialization module
-  - File: `core/rl/policies/initialization.py`
-  - Strategies: Xavier (encoder), Orthogonal (actor/critic), He
-  - Functions: init_encoder(), init_actor(), init_critic(), verify_initialization()
-  - Target: Proper variance, no gradient issues
-- [ ] 2.4.2: Weight sharing manager
-  - File: `core/rl/policies/weight_sharing.py`
-  - Class: SharedEncoderManager
-  - Features: Sharing verification, parameter counting, memory calculator
-  - Target: 71% parameter reduction (1,001M → 291M for 143 agents)
-- [ ] 2.4.3: Initialization tests
-  - File: `tests/test_initialization.py`
-  - Tests: All strategies, orthogonality checks, variance bounds
-  - Target: All tests passing, verified gradient flow
-- [ ] 2.4.4: SL transfer infrastructure (EXPERIMENTAL - use with caution)
-  - File: `core/rl/policies/sl_to_rl_transfer.py`
-  - **⚠️ WARNING:** SL models failed backtesting (-88% to -93%)
-  - Purpose: Infrastructure for Phase 3 experiments (A/B test)
-  - Protocol: Abandon if underperforms random init >10% in 20k steps
+**Completion Date:** 2025-10-06
+- [x] 2.4.1: Core initialization module
+	- File: `core/rl/policies/initialization.py`
+	- Strategies: Xavier (encoder), Orthogonal (actor/critic), He
+	- Functions: `init_encoder()`, `init_actor()`, `init_critic()`, `verify_initialization()`
+	- Result: Centralized helpers refactor `FeatureEncoder` / `SymbolAgent`; variance checks enforced via `verify_initialization`
+- [x] 2.4.2: Weight sharing manager
+	- File: `core/rl/policies/weight_sharing.py`
+	- Class: `SharedEncoderManager`
+	- Features: Sharing verification, parameter counting, memory calculator
+		- Result: Savings calculator confirms 97.29% parameter reduction for 143 agents (3.24M shared + 66.8k per agent)
+- [x] 2.4.3: Initialization tests
+	- File: `tests/test_initialization.py`
+	- Coverage: Primitive initializers, encoder init, actor/critic gains, sharing savings, SL transfer warnings
+	- Result: 32-test pytest suite (initializers, edge cases) passes locally; `coverage` reports 99% for `initialization.py`, 98% for `weight_sharing.py`
+- [x] 2.4.4: SL transfer infrastructure (EXPERIMENTAL - use with caution)
+	- File: `core/rl/policies/sl_to_rl_transfer.py`
+	- **⚠️ WARNING:** SL models failed backtesting (-88% to -93%)
+	- Purpose: Infrastructure for Phase 3 experiments (A/B test)
+	- Result: Warning-emitting utilities (`load_sl_checkpoint`, `transfer_sl_features_to_encoder`, `create_sl_transfer_experiment`) wired for opt-in trials
 
 **Detailed Strategy:** `memory-bank/PHASE_2_WEIGHT_INITIALIZATION_STRATEGY.md` (667 lines)
 
@@ -521,7 +543,7 @@ The shared transformer encoder is fully validated and production-ready:
 - `memory-bank/PHASE_2_WEIGHT_INITIALIZATION_STRATEGY.md` (667 lines) ← NEW: Task 2.4 strategy doc
 
 **Key Achievement from Task 2.4:**
-- **71% parameter reduction** via weight sharing (1,001M → 291M params for 143 agents)
+- **97.29% parameter reduction** via weight sharing (472.8M → 12.8M params for 143 agents)
 - **Training stability** via orthogonal/Xavier initialization
 - **Experimental SL transfer** infrastructure (use with caution given SL failures)
 
@@ -549,50 +571,734 @@ The shared transformer encoder is fully validated and production-ready:
 
 ---
 
-### Phase 3: Symbol Agent Training – Prototype (Weeks 7-8)
-**Goal:** Demonstrate viability by training 10 symbol agents and beating SL baseline on selected symbols.
+### Phase 3: Prototype Training & Validation (Weeks 7-8)
 
-**Milestones**
-- Training pipeline operational with MLflow, TensorBoard, checkpointing.
-- First 10 agents trained to convergence thresholds.
-- Hyperparameters tuned; analysis report delivered.
+**Status:** 🔜 READY TO START (Phase 2 Complete ✅)
 
-**Task Breakdown**
+**Goal:** Train 10-symbol multi-agent system, validate training pipeline, beat SL baseline, and establish hyperparameter foundation for Phase 4 scale-up.
 
-| Task ID | Description | Outputs | Dependencies | Owner | Est. Effort |
-| --- | --- | --- | --- | --- | --- |
-| 3.1 | Training Pipeline Setup | `train_symbol_agents.py`, configs | Phase 2 | MLE | 3 days |
-| 3.1.1-3.1.6 | Integrate MLflow, configure PPO, checkpointing, TensorBoard, early stopping | Scripts, configs | 1.6, 2.x | MLE | 3 days |
-| 3.2 | Curriculum Learning Design | Ranked symbol list, training schedule | 3.1 | MLE + RLS | 2 days |
-| 3.2.1-3.2.3 | Rank symbols, select first 10 (SPY, QQQ, AAPL, MSFT, NVDA, AMZN, META, TSLA, JPM, XOM), schedule progression | Curriculum doc | 0.5, 3.1 | MLE | 2 days |
-| 3.3 | Prototype Training Run | 10 trained agent checkpoints | 3.1-3.2 | MLE | 6 days |
-| 3.3.1-3.3.6 | Train 100k steps each, monitor metrics, validation on 2025 Q2, compare to SL baseline, log issues | Checkpoints + MLflow runs | 3.2 | MLE | 6 days |
-| 3.4 | Hyperparameter Tuning | Tuning experiments & results | 3.3 results | MLE | 3 days |
-| 3.4.1-3.4.4 | Adjust LR, entropy coef, GAE lambda, reward scaling; grid/random search; select best config | Hyperparam report | 3.3 | MLE | 3 days |
-| 3.5 | Analysis & Debugging | Insights and report | 3.3-3.4 | MLE + RLS | 2 days |
-| 3.5.1-3.5.5 | Visualize policies, reward components, check degeneracy, regime robustness, produce report | `analysis/reports/rl_prototype_analysis.md` | 3.4 | MLE | 2 days |
+**Duration:** 7-10 days
+**Critical Dependencies:** Phase 2 complete (FeatureEncoder, SymbolAgent validated)
 
-**Dependencies**
-- Phase 2 agents integrated; training data validated.
-- MLflow server accessible.
+---
 
-**Resource Requirements**
-- 2 GPUs (dedicated) for training runs.
-- 1× MLE full-time; RLS for review of analysis.
+#### 3.0 Phase 3 Overview
 
-**Success Criteria**
-- ✅ ≥5/10 agents achieve validation Sharpe > 0.3.
-- ✅ Agents outperform SL baseline on selected symbols.
-- ✅ No NaN losses or gradient explosions observed.
-- ✅ Training of 10 agents completes within 3 days on 8 GPUs or equivalent time-sliced hardware.
+**Strategic Objectives:**
+1. Validate multi-agent RL training pipeline end-to-end
+2. Beat catastrophic SL baseline (-88% to -93% losses)
+3. Achieve prototype targets: Sharpe >0.3, positive returns
+4. Establish optimal hyperparameters for Phase 4 (143 agents)
+5. Identify and mitigate training risks before scale-up
 
-**Quality Gate to exit Phase 3**
-- Prototype analysis reviewed with stakeholders; go/no-go recorded.
-- Hyperparameter configuration exported to `training/rl/configs/prototype.yaml`.
+**10-Symbol Prototype Portfolio:**
 
-**Rollback Plan**
-- If agents fail to meet Sharpe targets: revisit reward shaping (Phase 1) or architecture (Phase 2) before scaling.
-- If training instabilities persist: escalate to RLS, run ablation (reduced action space), or extend Phase 3 by 1 week with approval.
+| Symbol | Type | Sector | Rationale | Volatility | Market Cap |
+|--------|------|--------|-----------|------------|------------|
+| SPY | ETF | Benchmark | Market baseline, high liquidity | Low | ~$500B AUM |
+| QQQ | ETF | Tech Index | Tech-heavy regime contrast | Medium | ~$200B AUM |
+| AAPL | Stock | Tech | Validated in tests, mega-cap | Low-Med | $3.0T |
+| MSFT | Stock | Tech | Validated in tests, enterprise | Low-Med | $2.8T |
+| NVDA | Stock | Tech/AI | High vol, AI sector leader | High | $2.5T |
+| AMZN | Stock | Tech/Retail | E-commerce + cloud diversity | Medium | $1.8T |
+| META | Stock | Social Media | Advertising model unique | Medium | $1.2T |
+| TSLA | Stock | Auto/Energy | Extreme volatility, EV leader | Very High | $800B |
+| JPM | Stock | Finance | Bank sector representation | Medium | $600B |
+| XOM | Stock | Energy | Commodity/inflation hedge | Medium | $500B |
+
+**Portfolio Characteristics:**
+- **Sector Diversity:** 5 sectors (Tech 5, Index 2, Finance 1, Energy 1, Auto 1)
+- **Volatility Range:** Low (SPY) to Very High (TSLA) - tests agent adaptation
+- **Market Cap Range:** $500B - $3T - ensures data quality
+- **Correlation Mix:** High (tech cluster) + Low (XOM vs tech) - portfolio effects
+- **Data Quality:** All symbols validated in Phase 1 environment tests
+
+**Success Metrics vs SL Baseline:**
+
+| Metric | SL Baseline (MLP 0.80) | Phase 3 Target | Stretch Goal |
+|--------|------------------------|----------------|--------------|
+| Total Return | -10.9% | **≥+12%** | ≥+20% |
+| Annualized Return | -5.6% | **≥+15%** | ≥+25% |
+| Sharpe Ratio | -0.05 | **≥0.50** | ≥0.80 |
+| Max Drawdown | 12.4% (w/ losses) | **≤25%** | ≤20% |
+| Win Rate | 47.7% | **≥52%** | ≥55% |
+| Profit Factor | 0.82 | **≥1.30** | ≥1.50 |
+| Trades (10 agents, 2yr) | ~580 | 500-1000 | 400-800 |
+
+---
+
+#### Task 3.1: Data Preparation & Validation (1 day)
+
+### Task 3.1: Data Preparation & Validation ✅ (1 day) - COMPLETE
+
+**Completion Date:** 2025-10-06
+
+**Subtasks:**
+- [x] 3.1.1: Symbol portfolio validation
+  - Script: `scripts/validate_phase3_symbols.py`
+  - Result: 10/10 symbols passed validation with inferred trading-hour schedules
+  - Coverage: average 7,854 hourly bars per symbol (≈6,964 expected trading-hour slots) with <0.6% gaps
+  - Report: `analysis/reports/phase3_symbol_validation.csv`
+- [x] 3.1.2: Data splits & scaler preparation
+  - Script: `scripts/prepare_phase3_data.py`
+  - Splits: 70% train / 15% val / 15% test (chronological)
+  - Output: `data/phase3_splits/` with 10 symbol directories + `phase3_metadata.json`
+  - Scalers: StandardScaler fit on train only (covering 23 technical features + `sentiment_score_hourly_ffill`), persisted per symbol
+- [x] 3.1.3: SL baseline caching
+  - Script: `scripts/cache_sl_baseline.py`
+  - Models cached: MLP Trial 72, LSTM Trial 62, GRU Trial 93 (threshold 0.80)
+  - Format: `.npz` files with probabilities and signals per split
+
+**Status:** Data pipeline ready for training
+
+**Next:** Task 3.2 (Training Infrastructure Setup)
+
+**Owner:** MLE
+**Dependencies:** Phase 0 data validation complete
+
+**Subtasks:**
+
+**3.1.1: Symbol Data Extraction & Validation**
+- Extract 10-symbol data from `data/historical/{SYMBOL}/1Hour/data.parquet`
+- Verify data coverage: Oct 2023 - Oct 2025 (target 2 years)
+- Validate all 23 technical features present
+- Confirm sentiment scores attached (`sentiment_score_hourly_ffill`)
+- Check for NaN/missing values in recent 168 hours
+
+**Output:** `data/phase3_symbols_validation.json`
+```json
+{
+  "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "JPM", "XOM"],
+  "date_range": ["2023-10-02", "2025-10-01"],
+  "total_hours": 17520,
+  "coverage_pct": {"SPY": 99.8, "QQQ": 99.7, ...},
+  "missing_features": {},
+  "validation_status": "PASS"
+}
+```
+
+**3.1.2: Train/Val/Test Split Configuration**
+- **Training:** 2023-10-02 to 2024-12-31 (70%, ~12,700 hours)
+- **Validation:** 2025-01-01 to 2025-07-31 (15%, ~5,100 hours)
+- **Test (hold-out):** 2025-08-01 to 2025-10-01 (15%, ~1,500 hours)
+- Ensure chronological split (no shuffle) - critical for regime realism
+
+**Output:** `training/rl/configs/phase3_data_splits.yaml`
+
+**3.1.3: SL Prediction Cache Generation**
+- Load SL checkpoints: MLP72, LSTM62, GRU93
+- Generate predictions for all 10 symbols across full period
+- Cache as `data/rl_cache/sl_predictions_{symbol}.npy`
+- **Purpose:** Avoid inference overhead during training; 3 probs per timestep
+
+**3.1.4: Feature Statistics Computation**
+- Compute mean/std for normalization (fit on TRAINING split only)
+- Save scalers: `data/rl_cache/feature_scalers_phase3.joblib`
+- Verify scaler stats reasonable (no extreme outliers)
+
+**Success Criteria:**
+- ✅ All 10 symbols pass data validation
+- ✅ Train/val/test splits verified chronological
+- ✅ SL prediction cache generated (<1GB total)
+- ✅ Feature scalers saved and validated
+
+---
+
+#### Task 3.2: Training Pipeline Setup (1 day)
+
+**Owner:** MLE
+**Dependencies:** Task 3.1 complete, Phase 2 agents available
+
+**Subtasks:**
+
+**3.2.1: SB3 PPO Integration Script**
+
+Create `training/rl/train_symbol_agents.py`:
+
+```python
+"""
+Phase 3 Prototype Training Script
+
+Train 10 symbol agents using Stable-Baselines3 PPO with shared encoder.
+"""
+
+import argparse
+from pathlib import Path
+from typing import Dict, List
+
+import mlflow
+import torch
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.vec_env import VecNormalize
+
+from core.rl.environments import make_vec_trading_env
+from core.rl.policies import FeatureEncoder, SymbolAgent, EncoderConfig, SymbolAgentConfig
+from core.rl.policies.initialization import init_encoder, init_actor, init_critic
+from core.rl.policies.weight_sharing import SharedEncoderManager
+
+
+def create_shared_encoder(device: str = "cuda") -> FeatureEncoder:
+    """Initialize shared encoder for all symbol agents."""
+    config = EncoderConfig()
+    encoder = FeatureEncoder(config).to(device)
+    init_encoder(encoder, strategy="xavier_uniform", gain=1.0)
+    return encoder
+
+
+def train_agent(
+    symbol: str,
+    shared_encoder: FeatureEncoder,
+    config: Dict,
+    output_dir: Path,
+) -> None:
+    """Train single symbol agent."""
+    
+    # Create vectorized environment
+    env = make_vec_trading_env(
+        symbol=symbol,
+        num_envs=config["num_envs"],
+        data_root=config["data_root"],
+        split="train",
+    )
+    
+    # Wrap with normalization
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    
+    # Create agent
+    agent_config = SymbolAgentConfig(
+        encoder_config=EncoderConfig(),
+        hidden_dim=config["hidden_dim"],
+        dropout=config["dropout"],
+    )
+    agent = SymbolAgent(agent_config, shared_encoder=shared_encoder)
+    
+    # Initialize actor/critic (encoder already initialized)
+    init_actor(agent.actor, output_gain=0.01)  # Small init for exploration
+    init_critic(agent.critic)
+    
+    # Create PPO model
+    model = PPO(
+        policy=agent,
+        env=env,
+        learning_rate=config["learning_rate"],
+        n_steps=config["n_steps"],
+        batch_size=config["batch_size"],
+        n_epochs=config["n_epochs"],
+        gamma=config["gamma"],
+        gae_lambda=config["gae_lambda"],
+        clip_range=config["clip_range"],
+        ent_coef=config["ent_coef"],
+        vf_coef=config["vf_coef"],
+        max_grad_norm=config["max_grad_norm"],
+        tensorboard_log=str(output_dir / "tensorboard"),
+        verbose=1,
+    )
+    
+    # Setup callbacks
+    checkpoint_callback = CheckpointCallback(
+        save_freq=10000,
+        save_path=str(output_dir / f"checkpoints/{symbol}"),
+        name_prefix=f"{symbol}_agent",
+    )
+    
+    eval_callback = EvalCallback(
+        eval_env=make_vec_trading_env(symbol, num_envs=1, split="val"),
+        n_eval_episodes=10,
+        eval_freq=5000,
+        log_path=str(output_dir / f"eval/{symbol}"),
+        best_model_save_path=str(output_dir / f"best/{symbol}"),
+    )
+    
+    # Train
+    with mlflow.start_run(run_name=f"phase3_{symbol}"):
+        mlflow.log_params(config)
+        mlflow.log_param("symbol", symbol)
+        
+        model.learn(
+            total_timesteps=config["total_timesteps"],
+            callback=[checkpoint_callback, eval_callback],
+        )
+        
+        # Save final model
+        model.save(output_dir / f"final/{symbol}_agent")
+        env.save(output_dir / f"final/{symbol}_vecnormalize.pkl")
+        
+        mlflow.log_artifact(str(output_dir / f"final/{symbol}_agent.zip"))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--symbols", nargs="+", default=None)
+    parser.add_argument("--output-dir", type=Path, default=Path("training/rl/phase3_output"))
+    args = parser.parse_args()
+    
+    # Load config
+    import yaml
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+    
+    # Default 10-symbol portfolio
+    symbols = args.symbols or [
+        "SPY", "QQQ", "AAPL", "MSFT", "NVDA",
+        "AMZN", "META", "TSLA", "JPM", "XOM"
+    ]
+    
+    # Create shared encoder
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    shared_encoder = create_shared_encoder(device)
+    
+    # Setup encoder manager
+    manager = SharedEncoderManager(shared_encoder)
+    
+    # Train each agent sequentially (parallel training in Phase 4)
+    for symbol in symbols:
+        print(f"\n{'='*60}")
+        print(f"Training agent for {symbol}")
+        print(f"{'='*60}\n")
+        
+        train_agent(symbol, shared_encoder, config, args.output_dir)
+        
+    # Print parameter report
+    manager.print_report()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**3.2.2: Hyperparameter Configuration**
+
+Create `training/rl/configs/phase3_ppo_config.yaml`:
+
+```yaml
+# Phase 3 PPO Hyperparameters (Initial Baseline)
+
+training:
+  total_timesteps: 100000  # 100k steps per agent (~10-20 episodes)
+  num_envs: 8  # Parallel environments per agent
+  
+ppo:
+  learning_rate: 3.0e-4  # Standard PPO default
+  n_steps: 2048  # Rollout buffer size
+  batch_size: 64  # Mini-batch size for updates
+  n_epochs: 10  # Epochs per update
+  gamma: 0.99  # Discount factor
+  gae_lambda: 0.95  # GAE parameter
+  clip_range: 0.2  # PPO clip parameter
+  ent_coef: 0.01  # Entropy coefficient (encourage exploration)
+  vf_coef: 0.5  # Value function coefficient
+  max_grad_norm: 0.5  # Gradient clipping
+  
+agent:
+  hidden_dim: 128  # Actor/critic hidden dimension
+  dropout: 0.1  # Dropout rate
+  
+environment:
+  data_root: "data/historical"
+  reward_config:
+    pnl_weight: 0.40
+    cost_weight: 0.15
+    time_weight: 0.15
+    sharpe_weight: 0.05
+    drawdown_weight: 0.10
+    sizing_weight: 0.05
+    hold_weight: 0.00
+    
+logging:
+  mlflow_uri: "http://127.0.0.1:8080"
+  experiment_name: "phase3_prototype_training"
+  log_interval: 100
+```
+
+**3.2.3: MLflow Experiment Setup**
+- Start MLflow tracking server: `mlflow server --host 127.0.0.1 --port 8080`
+- Create experiment: "phase3_prototype_training"
+- Configure autologging for SB3
+
+**3.2.4: Monitoring Dashboard**
+- TensorBoard for training curves: `tensorboard --logdir training/rl/phase3_output/tensorboard`
+- MLflow UI for metrics comparison: `http://127.0.0.1:8080`
+
+**Success Criteria:**
+- ✅ Training script executes without errors on single symbol
+- ✅ MLflow logging captures hyperparameters and metrics
+- ✅ Checkpoints save correctly every 10k steps
+- ✅ TensorBoard displays training curves
+
+---
+- [x] 3.2.1: PPO configuration file
+  - File: `training/config_templates/phase3_ppo_baseline.yaml`
+  - Highlights: cosine learning-rate decay (3e-4 → 1e-5), 2048-step rollouts, 8 parallel envs, entropy decay 0.01 → 0.001, reward weights aligned with Phase 3 targets.
+- [x] 3.2.2: Training script with monitoring
+  - File: `training/train_phase3_agents.py`
+  - Features: MLflow experiment `phase3_10symbol_baseline`, Stable-Baselines3 TensorBoard logger, Rich live dashboard, reward component logging, evaluation + early stopping callbacks, automatic checkpoint rotation under `models/phase3_checkpoints/{SYMBOL}`.
+- [x] 3.2.3: Smoke test validation
+  - File: `scripts/test_phase3_training.py`
+  - Command (ran inside `trading_rl_env`): `python scripts/test_phase3_training.py`
+  - Result: 1,000-step PPO loop on AAPL completes in ~3 minutes, deterministic inference succeeds (`action: [1]`).
+- [x] 3.2.4: Monitoring dashboard
+  - TensorBoard logs emitted to `logs/phase3_training/AAPL/` (`events.out.tfevents...`), view with `tensorboard --logdir logs/phase3_training`.
+  - MLflow runs recorded under experiment `phase3_10symbol_baseline` (`mlruns/927459213633927191/*`), accessible via `mlflow ui --backend-store-uri file:./mlruns`.
+  - Short validation run (`python training/train_phase3_agents.py --config training/config_templates/phase3_ppo_baseline.yaml --symbols AAPL --total-timesteps 256 --n-envs 1 --eval-freq 128 --save-freq 128`) confirmed checkpointing, final model export, and summary logging.
+
+**Status:** Ready for full-scale training
+
+**Artifacts Produced:**
+- Baseline configuration: `training/config_templates/phase3_ppo_baseline.yaml`
+- Training script: `training/train_phase3_agents.py`
+- Smoke test: `scripts/test_phase3_training.py`
+- Monitoring outputs: `models/phase3_checkpoints/AAPL/`, `logs/phase3_training/AAPL/`, MLflow runs (`mlruns/927459213633927191/`), `models/phase3_checkpoints/training_summary.json`
+
+#### Task 3.3: Baseline Training Run (2-3 days)
+
+**Owner:** MLE
+**Dependencies:** Task 3.2 complete
+
+**3.3.1: Execute Initial Training**
+
+```bash
+# Activate RL environment
+source trading_rl_env/Scripts/activate
+
+# Start MLflow server (separate terminal)
+mlflow server --host 127.0.0.1 --port 8080
+
+# Start TensorBoard (separate terminal)
+tensorboard --logdir logs/phase3_training
+
+# Train all 10 agents
+python training/train_phase3_agents.py \
+  --config training/config_templates/phase3_ppo_baseline.yaml
+  --output-dir training/rl/phase3_output
+```
+
+**Training Schedule:**
+- Sequential training: ~10 hours per agent (8 parallel envs × 100k steps)
+- Total wall-clock: ~100-120 hours (4-5 days single GPU)
+- **Optimization:** Run 2 symbols in parallel on separate GPU cores → 2-3 days
+
+**3.3.2: Monitor Training Metrics**
+
+Track in MLflow + TensorBoard:
+- **Policy Metrics:** Loss, entropy, clip fraction, KL divergence
+- **Value Function:** Value loss, explained variance
+- **Environment:** Episode reward, episode length, success rate
+- **Agent-Specific:** Per-agent Sharpe, drawdown, trade count
+
+**Warning Signs:**
+- ❌ NaN losses (gradient explosion) → reduce LR or increase grad clipping
+- ❌ Entropy → 0 too fast (premature convergence) → increase ent_coef
+- ❌ Explained variance < 0 (poor value estimates) → check reward scaling
+- ❌ All actions = HOLD (degenerate policy) → check reward weights
+
+**3.3.3: Validation Evaluation**
+
+Every 5k steps, evaluate on validation set:
+- Run 10 episodes per agent on val split (2025 Q1-Q2)
+- Compute:
+  - Mean episode reward
+  - Sharpe ratio
+  - Max drawdown
+  - Win rate
+  - Total trades
+- Save best checkpoint based on Sharpe ratio
+
+**3.3.4: SL Baseline Comparison**
+
+After training complete:
+- Run validation backtest with SL checkpoints (threshold 0.80)
+- Compare RL vs SL on same val period:
+  - Sharpe: RL target ≥0.50 vs SL -0.05
+  - Return: RL target ≥+12% vs SL -10.9%
+  - Drawdown: RL target ≤25% vs SL 12.4%
+
+**Success Criteria:**
+- ✅ ≥5/10 agents complete 100k steps without crashes
+- ✅ ≥3/10 agents achieve validation Sharpe >0.3
+- ✅ No agent shows degenerate behavior (all HOLD)
+- ✅ At least 1 agent beats SL baseline on Sharpe
+
+---
+
+#### Task 3.4: Hyperparameter Tuning (2-3 days)
+
+**Owner:** MLE
+**Dependencies:** Task 3.3 baseline results
+
+**3.4.1: Identify Tuning Priorities**
+
+Based on baseline results, prioritize:
+
+**High Priority (tune first):**
+1. **Learning Rate:** Impacts convergence speed and stability
+2. **Entropy Coefficient:** Controls exploration vs exploitation
+3. **Reward Scaling:** Affects value function learning
+
+**Medium Priority:**
+4. **GAE Lambda:** Bias-variance tradeoff
+5. **Clip Range:** Policy update magnitude
+6. **Batch Size:** Sample efficiency
+
+**Low Priority (use defaults):**
+7. **N Epochs:** Usually 10 is fine
+8. **Hidden Dim:** Architecture already validated
+
+**3.4.2: Grid Search Strategy**
+
+Create `training/rl/configs/phase3_tuning_grid.yaml`:
+
+```yaml
+hyperparameters:
+  learning_rate: [1e-4, 3e-4, 1e-3]
+  ent_coef: [0.001, 0.01, 0.05]
+  gae_lambda: [0.90, 0.95, 0.98]
+  clip_range: [0.1, 0.2, 0.3]
+
+# 3×3×3×3 = 81 combinations → too many
+# Use random search: 20-30 trials
+strategy: random
+num_trials: 25
+eval_metric: validation_sharpe
+```
+
+**3.4.3: Optuna Integration**
+
+```python
+import optuna
+
+def objective(trial):
+    lr = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
+    ent_coef = trial.suggest_float("ent_coef", 1e-3, 5e-2, log=True)
+    gae_lambda = trial.suggest_float("gae_lambda", 0.9, 0.98)
+    
+    # Train subset (e.g., SPY only for speed)
+    val_sharpe = train_and_eval(
+        symbol="SPY",
+        lr=lr,
+        ent_coef=ent_coef,
+        gae_lambda=gae_lambda,
+        total_timesteps=50000,  # Half of baseline
+    )
+    
+    return val_sharpe
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=25)
+```
+
+**3.4.4: Best Config Selection**
+
+After tuning:
+- Select top 3 configs by validation Sharpe
+- Retrain on all 10 symbols with each config
+- Choose final config based on:
+  - Avg Sharpe across 10 symbols
+  - Stability (low Sharpe std across symbols)
+  - Training stability (low crash rate)
+
+**Success Criteria:**
+- ✅ Tuning completes 20+ trials
+- ✅ Best config improves ≥10% over baseline
+- ✅ Final config exported to `phase3_best_config.yaml`
+
+---
+
+#### Task 3.5: Analysis & Validation (1-2 days)
+
+**Owner:** MLE + RLS
+**Dependencies:** Task 3.4 complete
+
+**3.5.1: Policy Visualization**
+
+Generate for each agent:
+- **Action Distribution:** Histogram of actions taken (detect degeneracy)
+- **State-Action Heatmap:** Actions vs portfolio state
+- **Attention Weights:** Encoder attention on technical features
+- **Value Landscape:** Value estimates across states
+
+**3.5.2: Reward Component Analysis**
+
+Decompose reward into 7 components:
+- Plot time-series of each component contribution
+- Identify dominant components (should be balanced)
+- Check for reward hacking (e.g., gaming time efficiency)
+
+**3.5.3: Regime Robustness**
+
+Test agents on different market regimes:
+- **Bull Market:** 2024 Q1 (SPY +10%)
+- **Bear Market:** 2024 Q3 (SPY -5%)
+- **Sideways:** 2024 Q2 (SPY flat)
+
+Verify performance doesn't collapse in any regime.
+
+**3.5.4: Out-of-Sample Test**
+
+Final validation on held-out test set (Aug-Oct 2025):
+- Run 20 episodes per agent
+- Compute final metrics
+- Compare to validation metrics (should be similar)
+
+**3.5.5: Phase 3 Completion Report**
+
+Create `analysis/reports/phase3_completion_report.md`:
+
+**Sections:**
+1. **Executive Summary:** Key results vs targets
+2. **Training Metrics:** Convergence curves, stability
+3. **Validation Results:** Per-agent Sharpe, drawdown, returns
+4. **SL Comparison:** RL improvement quantification
+5. **Risk Analysis:** Identified failure modes
+6. **Phase 4 Recommendations:** Optimal hyperparameters, scaling strategy
+7. **Go/No-Go Decision:** Proceed to 143 agents or iterate
+
+**Success Criteria:**
+- ✅ ≥5/10 agents achieve Sharpe >0.3 on validation
+- ✅ ≥1 agent beats SL baseline by ≥20% on Sharpe
+- ✅ No catastrophic failures (e.g., >50% drawdown)
+- ✅ Training pipeline stable and reproducible
+
+---
+
+#### Phase 3 Deliverables Checklist
+
+**Code:**
+- [ ] `training/rl/train_symbol_agents.py` - Main training script
+- [ ] `training/rl/configs/phase3_ppo_config.yaml` - Hyperparameter config
+- [ ] `training/rl/configs/phase3_data_splits.yaml` - Data split config
+- [ ] `scripts/phase3_analysis.py` - Analysis utilities
+
+**Data:**
+- [ ] `data/phase3_symbols_validation.json` - Symbol validation
+- [ ] `data/rl_cache/sl_predictions_{symbol}.npy` - SL predictions (10 files)
+- [ ] `data/rl_cache/feature_scalers_phase3.joblib` - Feature scalers
+
+**Models:**
+- [ ] `training/rl/phase3_output/final/{SYMBOL}_agent.zip` - 10 trained agents
+- [ ] `training/rl/phase3_output/best/{SYMBOL}/` - Best checkpoints (10)
+- [ ] `training/rl/phase3_output/shared_encoder.pt` - Shared encoder
+
+**Logs:**
+- [ ] MLflow experiments with 10+ runs
+- [ ] TensorBoard logs for all agents
+- [ ] Evaluation results CSV
+
+**Reports:**
+- [ ] `analysis/reports/phase3_completion_report.md`
+- [ ] `memory-bank/PHASE_3_TRAINING_STRATEGY.md`
+- [ ] `memory-bank/PHASE_3_VALIDATION_PROTOCOL.md`
+
+**Documentation:**
+- [ ] Updated `memory-bank/RL_IMPLEMENTATION_PLAN.md` (this file)
+- [ ] Phase 4 prerequisites documented
+
+---
+
+#### Quality Gate to Exit Phase 3
+
+**Mandatory Requirements:**
+1. ✅ ≥5/10 agents achieve validation Sharpe >0.3
+2. ✅ ≥7/10 agents complete training without crashes
+3. ✅ At least 1 agent beats SL baseline (+12% return, 0.50 Sharpe)
+4. ✅ No degenerate policies (all HOLD or random actions)
+5. ✅ Training pipeline reproducible (same config → same results ±5%)
+6. ✅ Hyperparameters selected and validated
+7. ✅ Completion report approved by stakeholders
+
+**Optional Success (Stretch Goals):**
+- 🎯 ≥8/10 agents achieve Sharpe >0.5
+- 🎯 Portfolio-level Sharpe >0.8 (10 agents combined)
+- 🎯 All agents beat SL baseline
+- 🎯 Training time <3 days on single GPU
+
+**Go/No-Go Decision:**
+- **GO:** If mandatory requirements met → Proceed to Phase 4 (143 agents)
+- **NO-GO:** If <5 agents succeed → Iterate on reward shaping or architecture
+- **CONDITIONAL GO:** 5-7 agents succeed → Scale to 25-50 agents first (Phase 3.5)
+
+---
+
+#### Rollback Plan
+
+**If agents fail to meet Sharpe targets:**
+1. **Reward Rebalancing:** Adjust 7-component weights (Phase 1 task)
+2. **Architecture Simplification:** Reduce transformer layers 4→2
+3. **Extended Training:** Increase to 200k steps per agent
+4. **Symbol Subset:** Focus on best 5 symbols, debug issues
+
+**If training instabilities persist:**
+1. **Gradient Analysis:** Check grad norms, add diagnostic logging
+2. **Reward Clipping:** Add reward normalization or clipping
+3. **Ablation Study:** Remove action masking, simplify to 3 actions
+4. **Expert Consultation:** Engage RLS for reward hacking investigation
+
+**If timeline exceeds 10 days:**
+1. **Parallel Training:** Use 2 GPUs to run symbols in parallel
+2. **Reduce Tuning:** Use baseline hyperparameters, skip Optuna
+3. **Extend Phase:** Request 1-week extension with stakeholder approval
+
+---
+
+#### Phase 3 Risk Register
+
+| Risk | Probability | Impact | Mitigation | Owner |
+|------|------------|--------|------------|-------|
+| Training instability (NaN losses) | Medium | High | Gradient clipping, reward scaling, LR reduction | MLE |
+| Reward hacking (agents exploit loopholes) | Medium | High | Component analysis, policy visualization, manual review | MLE+RLS |
+| Poor generalization (overfit to train) | Medium | Medium | Walk-forward validation, regime testing | MLE |
+| Degenerate policies (all HOLD) | Low | High | Entropy bonus, action diversity metrics | MLE |
+| Compute bottleneck (training too slow) | Low | Medium | Parallel training, cloud burst | MLE |
+| Hyperparameter suboptimal | High | Medium | Grid search, Optuna tuning | MLE |
+| SL predictions unavailable | Low | Low | Fallback to zero probs, re-cache | MLE |
+
+---
+
+#### Dependencies & Prerequisites
+
+**From Phase 2:**
+- ✅ [`FeatureEncoder`](core/rl/policies/feature_encoder.py:1) (3.24M params, 2.08ms P95)
+- ✅ [`SymbolAgent`](core/rl/policies/symbol_agent.py:1) (66.8K params/agent)
+- ✅ [`initialization.py`](core/rl/policies/initialization.py:1) (Xavier, Orthogonal)
+- ✅ [`weight_sharing.py`](core/rl/policies/weight_sharing.py:1) (SharedEncoderManager)
+
+**From Phase 1:**
+- ✅ [`TradingEnvironment`](core/rl/environments/trading_env.py:1) (97% coverage, <1ms step)
+- ✅ [`RewardShaper`](core/rl/environments/reward_shaper.py:1) (7 components)
+- ✅ [`VectorizedEnv`](core/rl/environments/vec_trading_env.py:1) (SB3 compatible)
+
+**External:**
+- MLflow 2.15+ (tracking server running)
+- Stable-Baselines3 2.7.0 (installed in `trading_rl_env`)
+- CUDA 12.8 + PyTorch 2.8 (GPU inference)
+- 143 symbols data validated (from Phase 0)
+
+---
+
+#### Resource Requirements
+
+**Compute:**
+- 1× NVIDIA RTX 5070 Ti (16GB VRAM) - minimum
+- 2× GPUs preferred for parallel training
+- 96GB system RAM
+- 500GB storage for checkpoints
+
+**Time Allocation:**
+- MLE: Full-time (7-10 days)
+- RLS: Part-time review (2-3 days)
+- DevOps: On-call for MLflow/infrastructure
+
+**Data:**
+- 10 symbols × 2 years × 1-hour bars ≈ 175K timesteps
+- SL prediction cache: ~500MB
+- Checkpoint storage: ~50GB (10 agents × 5 checkpoints each)
+
+---
+
+**Phase 3 Status:** 🔜 READY TO START (awaiting Phase 2 completion)
+
+**Next Phase Preview:** Phase 4 - Scale to 143 agents with distributed training (Ray)
 
 ---
 

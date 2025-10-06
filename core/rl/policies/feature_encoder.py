@@ -157,7 +157,7 @@ class FeatureEncoder(nn.Module):
         self.output_proj = nn.Linear(self.config.d_model, self.config.output_dim)
         self.output_dropout = nn.Dropout(p=self.config.dropout)
 
-        self.apply(self._init_weights)
+        self._init_weights()
 
     def forward(
         self, observations: Dict[str, Tensor], return_sequence: bool = False
@@ -207,10 +207,9 @@ class FeatureEncoder(nn.Module):
             return pooled, encoded
         return pooled
 
-    def _init_weights(self, module: nn.Module) -> None:
-        """Apply Xavier uniform initialization to linear layers."""
+    def _init_weights(self) -> None:
+        """Initialize encoder weights via centralized strategy helpers."""
 
-        if isinstance(module, nn.Linear):
-            nn.init.xavier_uniform_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
+        from .initialization import init_encoder
+
+        init_encoder(self, strategy="xavier_uniform", gain=1.0)

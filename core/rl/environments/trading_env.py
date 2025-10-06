@@ -18,6 +18,18 @@ from .portfolio_manager import PortfolioConfig, PortfolioManager
 from .regime_indicators import RegimeIndicators
 from .reward_shaper import RewardConfig, RewardShaper
 
+COLUMN_ALIASES: Dict[str, str] = {
+    "Open": "open",
+    "High": "high",
+    "Low": "low",
+    "Close": "close",
+    "Volume": "volume",
+    "VWAP": "vwap",
+    "MACD_line": "MACD",
+    "Stoch_K": "Stochastic_K",
+    "Stoch_D": "Stochastic_D",
+}
+
 try:  # pragma: no cover - import guard
     from scripts.sl_checkpoint_utils import load_sl_checkpoint  # type: ignore
 except ImportError:  # pragma: no cover - graceful degradation when utilities unavailable
@@ -319,6 +331,13 @@ class TradingEnvironment(gym.Env):
                 "equity_final": float(current_equity),
                 "max_drawdown": float(metrics["max_drawdown"]),
             }
+            # Persist end-of-episode diagnostics so callers can consume them even if
+            # the vectorised environment resets the underlying environment instance
+            # immediately after this step returns.
+            info["terminal_metrics"] = dict(metrics)
+            info["terminal_trades"] = list(self.portfolio.get_closed_positions())
+            info["terminal_reward_stats"] = self.reward_shaper.get_episode_stats()
+            info["terminal_equity_curve"] = list(self.portfolio.equity_curve)
 
         if self.render_mode == "human":
             self._render_human(info)
@@ -349,11 +368,56 @@ class TradingEnvironment(gym.Env):
             raise FileNotFoundError(f"Data path {self.config.data_path} does not exist")
 
         data = pd.read_parquet(self.config.data_path)
+
         if "timestamp" not in data.columns:
-            raise ValueError("Expected 'timestamp' column in data")
+            if isinstance(data.index, pd.DatetimeIndex):
+                data = data.reset_index()
+                index_name = data.columns[0]
+                data = data.rename(columns={index_name: "timestamp"})
+            elif "datetime" in data.columns:
+                data = data.rename(columns={"datetime": "timestamp"})
+            else:
+                raise ValueError("Expected 'timestamp' column in data")
 
         data["timestamp"] = pd.to_datetime(data["timestamp"])
         data = data.sort_values("timestamp").reset_index(drop=True)
+
+        # Normalize base OHLCV columns while preserving raw price levels
+        base_aliases = {
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+            "VWAP": "vwap",
+        }
+
+        for source, dest in base_aliases.items():
+            if source not in data.columns:
+                continue
+
+            if dest in data.columns:
+                original = data[source].astype(float)
+                candidate = data[dest].astype(float)
+                if not np.allclose(original.fillna(0.0), candidate.fillna(0.0), equal_nan=True):
+                    alt_name = f"{dest}_normalized"
+                    suffix = 1
+                    while alt_name in data.columns:
+                        alt_name = f"{dest}_normalized_{suffix}"
+                        suffix += 1
+                    data = data.rename(columns={dest: alt_name})
+            data = data.rename(columns={source: dest})
+
+        # Apply remaining alias normalization without overwriting existing columns
+        for source, dest in COLUMN_ALIASES.items():
+            if source in base_aliases:
+                continue
+            if source in data.columns and dest not in data.columns:
+                data = data.rename(columns={source: dest})
+
+        # Drop duplicated columns created by alias normalization (keep first/raw values)
+        if data.columns.duplicated().any():
+            data = data.loc[:, ~data.columns.duplicated(keep="first")]
 
         if self.config.train_start and self.config.train_end:
             start = pd.Timestamp(self.config.train_start)
@@ -843,6 +907,11 @@ class TradingEnvironment(gym.Env):
             "position_open": bool(position is not None),
             "last_action": self.last_action.name,
         }
+
+        # Attach a snapshot of the portfolio metrics so downstream consumers (e.g.
+        # evaluation loops running on vectorised envs that auto-reset) can rely on
+        # the info payload without re-querying the environment state.
+        info["metrics"] = dict(metrics)
 
         if position is not None:
             info["position"] = {

@@ -1,0 +1,178 @@
+# Phase 3 PPO Baseline Configuration
+# 10-Symbol Prototype Training
+# Target: Beat SL baseline (-10.9% return, -0.05 Sharpe)
+
+experiment:
+  name: "phase3_10symbol_baseline"
+  description: "Phase 3 baseline training with 10 symbols"
+  symbols:
+    - SPY   # S&P 500 ETF
+    - QQQ   # Nasdaq 100 ETF
+    - AAPL  # Apple
+    - MSFT  # Microsoft
+    - NVDA  # NVIDIA
+    - AMZN  # Amazon
+    - META  # Meta Platforms
+    - TSLA  # Tesla
+    - JPM   # JP Morgan
+    - XOM   # Exxon Mobil
+
+  # Paths
+  data_dir: "data/phase3_splits"
+  checkpoint_dir: "models/phase3_checkpoints"
+  log_dir: "logs/phase3_training"
+  mlflow_uri: "file:./mlruns"
+
+# PPO Hyperparameters (from Phase 3 planning)
+ppo:
+  # Learning rate
+  learning_rate: 3.0e-4  # Standard PPO, cosine decay
+  lr_schedule: "cosine"  # Options: constant, linear, cosine
+  lr_min: 1.0e-5         # Minimum learning rate for decay schedules
+
+  # Training rollout collection
+  n_steps: 2048          # Steps per update (per environment)
+  batch_size: 256        # Minibatch size for SGD
+  n_epochs: 10           # Optimization epochs per update
+  gamma: 0.99            # Discount factor
+
+  # GAE (Generalized Advantage Estimation)
+  gae_lambda: 0.95       # Balance bias-variance (0.9-0.99)
+
+  # PPO-specific
+  clip_range: 0.2        # Policy clip range (standard)
+  clip_range_vf: null    # Value function clip (null = no clip)
+
+  # Regularization
+  ent_coef: 0.01         # Entropy coefficient (exploration)
+  ent_decay: 0.995       # Multiplicative decay per update
+  ent_min: 0.001         # Minimum entropy coefficient
+  vf_coef: 0.5           # Value function coefficient
+  max_grad_norm: 0.5     # Gradient clipping (transformer stability)
+
+  # Advantage normalization
+  normalize_advantage: true
+
+  # Policy/Value networks
+  policy: "MultiInputPolicy"
+  policy_kwargs:
+    activation_fn: "relu"
+    net_arch:
+      pi: [256, 128]
+      vf: [256, 128]
+    ortho_init: true
+
+# Training schedule
+training:
+  total_timesteps: 100000    # 100k steps per agent (~2-3 hours)
+  eval_freq: 5000            # Evaluate every 5k steps
+  save_freq: 10000           # Save checkpoint every 10k steps
+  n_eval_episodes: 10        # Episodes per evaluation
+  log_interval: 100          # Log every 100 updates
+  n_envs: 8                  # Vectorized environments per agent
+  seed: 42                   # Global seed for reproducibility
+
+  # Callbacks
+  early_stopping:
+    enabled: true
+    patience: 5              # Stop if no improvement for 5 evals
+    min_delta: 0.01          # Minimum Sharpe improvement
+    metric: "sharpe"
+
+  checkpoint_on_best: true   # Save best model during training
+
+# Environment configuration
+environment:
+  episode_length: 168        # 1 week (168 hours)
+  lookback_window: 24        # 1-day lookback
+  initial_capital: 10000.0
+  commission_rate: 0.001     # 0.1% per trade
+  slippage_pct: 0.0005       # 0.05% slippage
+  stop_loss_pct: 0.02        # 2% stop loss
+  take_profit_pct: 0.025     # 2.5% take profit
+  max_hold_hours: 8
+  log_level: "WARNING"
+  log_trades: false
+
+  # Reward weights (from Phase 3 planning)
+  reward_weights:
+    pnl: 0.40              # Primary objective
+    cost: 0.15             # SL failure #1 (transaction costs)
+    time: 0.15             # SL failure #2 (timing)
+    sharpe: 0.05           # Risk-adjusted
+    drawdown: 0.10         # SL failure #5 (risk management)
+    sizing: 0.05           # Position quality
+    hold: 0.00             # Disabled (no-trade penalty)
+
+  # Risk limits
+  max_position_pct: 0.20     # Max 20% per position
+  max_portfolio_exposure: 0.90  # Max 90% total exposure
+  max_portfolio_drawdown: 0.30  # Emergency stop at 30% drawdown
+  max_position_loss: 0.08       # Auto-close at -8%
+
+  # Feature dimensions (for documentation/validation purposes)
+  technical_features: 23     # Technical indicators
+  sl_features: 3             # SL probabilities
+  sentiment_features: 1      # Sentiment score
+  position_features: 5       # Position state
+  portfolio_features: 8      # Portfolio metrics
+  regime_features: 10        # Market regime
+
+  # Optional supervised-learning checkpoints to warm-start features
+  sl_checkpoints: {}
+
+# Monitoring
+monitoring:
+  tensorboard: true
+  mlflow: true
+
+  training_metrics:
+    - policy_loss
+    - value_loss
+    - entropy
+    - approx_kl
+    - explained_variance
+    - clip_fraction
+
+  environment_metrics:
+    - episode_reward
+    - episode_length
+    - reward_stats
+    - action_distribution
+
+  trading_metrics:
+    - sharpe_ratio
+    - total_return
+    - max_drawdown
+    - win_rate
+    - profit_factor
+    - avg_trade_duration
+
+  technical_metrics:
+    - fps
+    - time_elapsed
+    - gpu_utilization
+
+# Validation
+validation:
+  run_on_val: true           # Validate during training
+  val_freq: 5000             # Validate every 5k steps
+  n_val_episodes: 10         # Episodes for validation
+  deterministic: true
+
+  success_thresholds:
+    min_sharpe: 0.30         # MVA threshold
+    target_sharpe: 0.50      # TA threshold
+    min_return: 0.0          # Positive returns
+    max_drawdown: 0.35       # 35% max DD
+
+# Optimization (optional, for later tuning)
+optimization:
+  enabled: false
+  n_trials: 20
+  study_name: "phase3_hpo"
+  search_space:
+    learning_rate: [1.0e-5, 1.0e-3]
+    ent_coef: [0.001, 0.1]
+    gae_lambda: [0.9, 0.99]
+    clip_range: [0.1, 0.3]
