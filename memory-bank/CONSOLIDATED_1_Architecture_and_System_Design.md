@@ -1,7 +1,7 @@
 # Consolidated Documentation: Core Architecture & System Design
 
 **Document Version:** 2.0 - Consolidated  
-**Last Updated:** October 5, 2025  
+**Last Updated:** October 6, 2025  
 **Status:** Production Reference  
 **Consolidates:** systemPatterns.md, techContext.md, productContext.md, rl_system_architecture.md, asset_id_embedding_strategy.md
 
@@ -608,6 +608,11 @@ Hierarchical multi-agent RL system designed to replace underperforming supervise
   - Graph: Message passing for cross-asset correlation
 - **Hybrid SL+RL:** Appends probabilities from MLP72, LSTM62, GRU93 checkpoints
 
+**Current Implementation Status (October 6, 2025):**
+- Shared transformer encoder (`core/rl/policies/feature_encoder.py`) finalized at 4 layers, 256 hidden dim, 8 heads, with 3.24 M parameters and full unit test coverage.
+- GPU benchmark via `scripts/benchmark_feature_encoder.py` shows batch-32 P95 latency 2.08 ms, throughput 25.7k samples/sec, activation memory 18.9 MB (`analysis/reports/feature_encoder_benchmark.json`).
+- Real trading data integration (`scripts/test_encoder_integration.py`) sanitizes parquet inputs into `analysis/integration_cache/` and validated AAPL/GOOGL/MSFT rollouts (5×100 + 2×30 episodes) with zero NaN/Inf, confirming readiness for SymbolAgent consumption.
+
 ### Observation Model
 
 **Dimension:** ~512
@@ -799,4 +804,4 @@ CUDA_VISIBLE_DEVICES=0
 **Document Maintenance:**
 - This consolidated document replaces: `systemPatterns.md`, `techContext.md`, `productContext.md`, `rl_system_architecture.md`, `asset_id_embedding_strategy.md`
 - Update frequency: As major architectural changes occur
-- Last consolidation: October 5, 2025
+- Last consolidation: October 6, 2025

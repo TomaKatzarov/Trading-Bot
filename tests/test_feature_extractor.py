@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+import sys
+import types
 
 from core.rl.environments.feature_extractor import FeatureConfig, FeatureExtractor
 from core.rl.environments.regime_indicators import RegimeIndicators
@@ -155,6 +157,205 @@ class TestFeatureExtractor:
 
         assert preds.shape == (3,)
         assert np.allclose(preds, 0.5)
+
+    def test_partial_window_padding(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(
+            normalize_method="none",
+            allow_partial_windows=True,
+            pad_value=-1.0,
+        )
+        extractor = FeatureExtractor(sample_data, config, lookback_window=24)
+
+        window = extractor.extract_window(5, normalize=False)
+        pad_rows = extractor.lookback_window - 5
+
+        assert window.shape == (extractor.lookback_window, extractor.get_feature_count())
+        assert np.allclose(window[:pad_rows], -1.0)
+        assert np.any(window[pad_rows:] != -1.0)
+
+    def test_missing_columns_strict_raises(self, sample_data: pd.DataFrame) -> None:
+        data = sample_data.drop(columns=["sentiment_score_hourly_ffill"])
+        config = FeatureConfig(normalize_method="none")
+
+        with pytest.raises(ValueError):
+            FeatureExtractor(data, config, lookback_window=24)
+
+    def test_missing_columns_non_strict(self, sample_data: pd.DataFrame) -> None:
+        data = sample_data.drop(columns=["sentiment_score_hourly_ffill"])
+        config = FeatureConfig(normalize_method="none", strict_feature_check=False)
+
+        extractor = FeatureExtractor(data, config, lookback_window=24)
+
+        assert "sentiment_score_hourly_ffill" not in extractor.get_feature_names()
+
+    def test_minmax_normalization_fallback(self, sample_data: pd.DataFrame) -> None:
+        patched = sample_data.copy()
+        patched["close"] = 1.0
+        config = FeatureConfig(normalize_method="minmax", normalize_window=30)
+        extractor = FeatureExtractor(patched, config, lookback_window=24)
+
+        window = extractor.extract_window(100, normalize=True)
+        idx = extractor.get_feature_names().index("close")
+
+        assert np.allclose(window[:, idx], 0.5)
+
+    def test_zscore_normalization_handles_zero_std(self, sample_data: pd.DataFrame) -> None:
+        patched = sample_data.copy()
+        patched["close"] = 7.0
+        config = FeatureConfig(normalize_method="zscore", normalize_window=30)
+        extractor = FeatureExtractor(patched, config, lookback_window=24)
+
+        window = extractor.extract_window(90, normalize=True)
+        idx = extractor.get_feature_names().index("close")
+
+        assert np.allclose(window[:, idx], 0.0)
+
+    def test_robust_normalization_handles_zero_iqr(self, sample_data: pd.DataFrame) -> None:
+        patched = sample_data.copy()
+        patched["close"] = -3.0
+        config = FeatureConfig(normalize_method="robust", normalize_window=30)
+        extractor = FeatureExtractor(patched, config, lookback_window=24)
+
+        window = extractor.extract_window(110, normalize=True)
+        idx = extractor.get_feature_names().index("close")
+
+        assert np.allclose(window[:, idx], 0.0)
+
+    def test_reconfigure_and_update_data(self, sample_data: pd.DataFrame) -> None:
+        base_config = FeatureConfig(normalize_method="none")
+        extractor = FeatureExtractor(sample_data, base_config, lookback_window=24)
+
+        trimmed = sample_data.iloc[::2].copy()
+        extractor.update_data(trimmed)
+        assert extractor.get_valid_range()[1] == len(trimmed)
+
+        new_config = FeatureConfig(normalize_method="minmax", normalize_window=25)
+        extractor.reconfigure(new_config)
+
+        window = extractor.extract_window(extractor.get_valid_range()[0] + 1, normalize=True)
+
+        assert np.isfinite(window).all()
+        assert np.all((0.0 <= window) & (window <= 1.0))
+
+    def test_cache_size_validation(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="none", cache_size=0)
+
+        with pytest.raises(ValueError):
+            FeatureExtractor(sample_data, config, lookback_window=24)
+
+    def test_feature_config_as_dict(self) -> None:
+        config = FeatureConfig(normalize_method="minmax", normalize_window=50, feature_subset=("close",))
+
+        config_dict = config.as_dict()
+
+        assert config_dict["normalize_method"] == "minmax"
+        assert config_dict["normalize_window"] == 50
+        assert tuple(config_dict["feature_subset"]) == ("close",)
+
+    def test_validate_index_bounds(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig()
+        extractor = FeatureExtractor(sample_data, config, lookback_window=24)
+
+        assert extractor.validate_index(24)
+        assert not extractor.validate_index(len(sample_data) + 1)
+        assert not extractor.validate_index(-1)
+
+    def test_prefetch_and_clear_cache(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="none")
+        extractor = FeatureExtractor(sample_data, config, lookback_window=24)
+
+        extractor.prefetch(range(50, 55))
+        stats_after_prefetch = extractor.get_cache_stats()
+        assert stats_after_prefetch["misses"] >= 1
+
+        extractor.extract_window(54)
+        stats_after_hit = extractor.get_cache_stats()
+        assert stats_after_hit["hits"] >= 1
+
+        extractor.clear_cache()
+        cleared_stats = extractor.get_cache_stats()
+        assert cleared_stats["total"] == 0
+
+    def test_get_sl_predictions_with_stubbed_inference(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="zscore")
+
+        module_name = "scripts.sl_checkpoint_utils"
+        fake_module = types.ModuleType(module_name)
+
+        def run_inference(bundle, input_tensor):
+            if bundle == "mlp":
+                return {"probability": 0.91}
+            if bundle == "lstm":
+                return [0.27]
+            if bundle == "gru":
+                return 0.13
+            raise RuntimeError("unexpected bundle")
+
+        fake_module.run_inference = run_inference  # type: ignore[attr-defined]
+        sys.modules[module_name] = fake_module
+
+        try:
+            extractor = FeatureExtractor(
+                sample_data,
+                config,
+                lookback_window=24,
+                sl_models={"mlp": "mlp", "lstm": "lstm", "gru": "gru"},
+            )
+
+            window = extractor.extract_window(200)
+            probs = extractor.get_sl_predictions(200, window=window)
+
+            assert np.allclose(probs, [0.91, 0.27, 0.13])
+        finally:
+            sys.modules.pop(module_name, None)
+
+    def test_prepare_dataframe_validations(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="none")
+
+        with pytest.raises(TypeError):
+            FeatureExtractor(123, config, lookback_window=24)  # type: ignore[arg-type]
+
+        with pytest.raises(ValueError):
+            FeatureExtractor(pd.DataFrame(), config, lookback_window=24)
+
+        shuffled = sample_data.sample(frac=1.0, random_state=0)
+        extractor = FeatureExtractor(shuffled, config, lookback_window=24)
+        assert extractor.data.index.is_monotonic_increasing
+
+    def test_feature_subset_invalid_request(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(
+            normalize_method="none",
+            feature_subset=("nonexistent",),
+        )
+
+        with pytest.raises(ValueError):
+            FeatureExtractor(sample_data, config, lookback_window=24)
+
+    def test_compute_feature_statistics(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="none")
+        extractor = FeatureExtractor(sample_data, config, lookback_window=24)
+
+        stats = extractor.compute_feature_statistics()
+
+        assert "missing_ratio" in stats.columns
+        assert not stats.isna().any().any()
+
+    def test_iter_feature_windows(self, sample_data: pd.DataFrame) -> None:
+        config = FeatureConfig(normalize_method="none")
+        extractor = FeatureExtractor(sample_data, config, lookback_window=24)
+
+        windows = list(extractor.iter_feature_windows(20, 80, 10, normalize=False))
+
+        indices = [idx for idx, _ in windows]
+        assert all(extractor.validate_index(idx) for idx in indices)
+        assert indices[0] >= extractor.get_valid_range()[0]
+
+    def test_reconfigure_invalid_method(self, sample_data: pd.DataFrame) -> None:
+        extractor = FeatureExtractor(sample_data, FeatureConfig(), lookback_window=24)
+        bad_config = FeatureConfig(normalize_method="bogus")
+
+        with pytest.raises(ValueError):
+            extractor.reconfigure(bad_config)
 
 
 class TestRegimeIndicators:

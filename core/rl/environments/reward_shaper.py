@@ -44,10 +44,10 @@ class RewardConfig:
     """
 
     # Component weights
-    pnl_weight: float = 0.40  # Primary signal
-    transaction_cost_weight: float = 0.20  # Critical for cost awareness
+    pnl_weight: float = 0.45  # Primary signal
+    transaction_cost_weight: float = 0.15  # Cost awareness without over-penalizing
     time_efficiency_weight: float = 0.15  # Reward speed
-    sharpe_weight: float = 0.10  # Risk-adjusted focus
+    sharpe_weight: float = 0.05  # Risk-adjusted focus
     drawdown_weight: float = 0.10  # Severe loss penalty
     sizing_weight: float = 0.05  # Capital utilization
     hold_penalty_weight: float = 0.0  # Optional: discourage holding too long
@@ -55,7 +55,7 @@ class RewardConfig:
     # Normalization parameters
     pnl_scale: float = 0.01  # Expected PnL scale (1%)
     time_horizon: int = 8  # Max holding period (hours)
-    target_sharpe: float = 0.5  # Target Sharpe ratio
+    target_sharpe: float = 1.0  # Target Sharpe ratio
     max_drawdown_threshold: float = 0.05  # 5% loss triggers penalty
 
     # Shaping parameters
@@ -69,8 +69,8 @@ class RewardConfig:
     severe_loss_penalty: float = -5.0  # Large penalty for >2% loss
 
     # Transaction cost assumptions
-    base_transaction_cost_pct: float = 0.0015  # 0.15% default cost
-    failed_action_penalty: float = -0.1  # Penalty for invalid attempts
+    base_transaction_cost_pct: float = 0.001  # 0.10% default cost
+    failed_action_penalty: float = -0.05  # Penalty for invalid attempts
 
     # Numerical safety
     min_equity: float = 1e-6  # Avoid divide-by-zero in PnL

@@ -1,7 +1,7 @@
 # Consolidated Documentation: Project Status, Progress & Results Analysis
 
 **Document Version:** 2.0 - Consolidated  
-**Last Updated:** October 5, 2025  
+**Last Updated:** October 6, 2025  
 **Status:** Living Document  
 **Consolidates:** activeContext.md, progress.md, decisionLog.md, phase3_hpo_results_analysis.md, phase3_completion_report.md, phase3_next_steps.md, strategic_plan_nn_rl.md, sl_to_rl_pivot_analysis.md, diagnostic reports
 
@@ -24,7 +24,7 @@
 ## 1. Current Project Status
 
 ### Overview
-**Last Updated:** October 5, 2025  
+**Last Updated:** October 6, 2025  
 **Current Phase:** Phase 4 - Backtesting & Remediation  
 **Project Health:** ⚠️ **CRITICAL** - Backtesting revealed catastrophic losses despite strong classification metrics
 
@@ -62,7 +62,7 @@ Phase 6: Production Deployment              🔜 ON HOLD
 
 ### Active Work
 
-**Current Focus:** Diagnostic analysis and remediation experiments
+**Current Focus:** Phase 4 remediation experiments **and** Phase 2 RL agent build-out (Task 2.1 shared encoder complete as of Oct 6)
 
 **Key Investigations:**
 1. **Threshold Optimization:** Testing signal_threshold ranges 0.5-0.9 to reduce false positives
@@ -75,19 +75,29 @@ Phase 6: Production Deployment              🔜 ON HOLD
 - Whether to retrain models with different profit targets
 - Whether to implement regime-aware filters before RL development
 
-### RL Initiative Kickoff (Phase 0)
-**Status:** ✅ Foundational tasks underway (Week 1 of RL roadmap)
+### RL Initiative Progress (Phases 0 ➜ 2)
+**Status:** ✅ Phase 0 & Phase 1 complete; Phase 2 Task 2.1 delivered (Week 5 of RL roadmap)
 
-- **Environment & Hardware Verification:** `scripts/verify_rl_environment.py`, `scripts/verify_rl_libraries.py`, and `scripts/test_gpu_rl_readiness.py` confirm Python 3.12.10, PyTorch 2.8.0.dev+cu128, CUDA 12.8, and RTX 5070 Ti readiness. Reports archived in `docs/setup_rl_environment.md` and `docs/gpu_readiness_report.txt`.
-- **Data Readiness Audit:** `scripts/validate_rl_data_readiness.py` produced `data/validation_report.json` summarising symbol coverage (86/162 passing) and enumerating remediation gaps (19 missing parquet directories, 57 symbols outside tolerance). Narrative captured in `docs/data_quality_report_rl.md`.
-- **SL Checkpoint Staging:** Best HPO checkpoints (MLP72, LSTM62, GRU93) copied to `models/sl_checkpoints/` with scalers and metadata. New validation harness `scripts/test_sl_checkpoint_loading.py` confirms load/inference parity; `reports/sl_checkpoint_validation.json` logs metrics and logits.
-- **Inference Benchmarking:** `scripts/benchmark_sl_inference.py` demonstrates <0.2 ms/sample latency for all checkpoints on GPU (`reports/sl_inference_benchmarks.json`), meeting Phase 0 performance target.<br>
-- **Remaining Phase 0 Work:** Resolve data coverage gaps, scaffold RL package structure (`core/rl/`, `training/rl/`), and develop SL baseline report prior to Phase 1 kickoff.
+- **Phase 0 deliverables (Week 1):**
+   - `scripts/verify_rl_environment.py`, `scripts/verify_rl_libraries.py`, and `scripts/test_gpu_rl_readiness.py` confirm Python 3.12.10, PyTorch 2.8.0.dev+cu128, CUDA 12.8, and RTX 5070 Ti readiness. Reports archived in `docs/setup_rl_environment.md` and `docs/gpu_readiness_report.txt`.
+   - `scripts/validate_rl_data_readiness.py` produced `data/validation_report.json` summarising symbol coverage (86/162 passing) and enumerating remediation gaps (19 missing parquet directories, 57 symbols outside tolerance). Narrative captured in `docs/data_quality_report_rl.md`.
+   - HPO checkpoints (MLP72, LSTM62, GRU93) staged under `models/sl_checkpoints/` with scalers; `scripts/test_sl_checkpoint_loading.py` + `reports/sl_checkpoint_validation.json` verify parity.
+   - `scripts/benchmark_sl_inference.py` demonstrates <0.2 ms/sample GPU latency (`reports/sl_inference_benchmarks.json`) meeting the Phase 0 performance target.
 
-**Phase 1 Progress Snapshot (October 5, 2025):**
-- Task 1.2 ✅ Feature engineering stack (`FeatureExtractor`, `RegimeIndicators`) wired into `TradingEnvironment`, benchmarked at P95 < 2 ms with cache warm, and regression suite (`tests/test_feature_extractor.py`, `tests/test_trading_env.py`) green in `.venv`.
-- **Task 1.3 ✅ Reward function overhaul:** Introduced `RewardShaper` with seven components (PnL, cost, time, Sharpe, drawdown, sizing, optional hold penalty), comprehensive unit coverage (`tests/test_reward_shaper.py`), integration into `TradingEnvironment` with per-step component analytics, and reward signal diagnostics via `scripts/analyze_reward_signals.py`. Full suite passes inside `trading_rl_env` with Gymnasium dependencies.
-- **Task 1.4 ✅ Portfolio state management and monitoring:** `PortfolioManager` now drives all position/cash bookkeeping within `TradingEnvironment`, enforcing size/drawdown limits automatically and exposing rich telemetry through the observation/info dicts. Comprehensive unit/regression coverage (`tests/test_portfolio_manager.py`, `tests/test_trading_env.py`) plus the new `scripts/monitor_environment_performance.py` dashboard provide action/reward/portfolio diagnostics; Task 1.4 deliverables are documented in `memory-bank/RL_IMPLEMENTATION_PLAN.md`.
+- **Phase 1 environment hardening (Weeks 2-4):**
+   - Task 1.2 ✅ Feature engineering stack (`FeatureExtractor`, `RegimeIndicators`) wired into `TradingEnvironment`, benchmarked at P95 <2 ms, regression suites (`tests/test_feature_extractor.py`, `tests/test_trading_env.py`) fully green.
+   - Task 1.3 ✅ Reward function overhaul via `RewardShaper` (7-component reward) plus diagnostics (`scripts/analyze_reward_signals.py`), all unit tests passing in `.venv`.
+   - Task 1.4 ✅ Portfolio state management upgrades (`PortfolioManager`) enforcing risk constraints with telemetry exports and monitoring dashboard (`scripts/monitor_environment_performance.py`).
+
+- **Phase 2 Task 2.1 shared encoder (Week 5, October 6, 2025):**
+   - 4-layer transformer encoder in `core/rl/policies/feature_encoder.py` finalized with 15-unit test suite and 100% coverage.
+   - `scripts/benchmark_feature_encoder.py` records GPU batch-32 P95 latency 2.08 ms (target <10 ms), throughput 25.7k samples/sec, activation memory 18.9 MB (`analysis/reports/feature_encoder_benchmark.json`).
+   - `scripts/test_encoder_integration.py` sanitizes raw parquet schemas into `analysis/integration_cache/` and validates AAPL/GOOGL/MSFT rollouts (5×100 + 2×30 episodes) with zero NaN/Inf across single- and multi-env batches.
+
+- **Upcoming milestones:**
+   - Task 2.2 – SymbolAgent actor-critic implementation and parameter budget validation.
+   - Task 2.3 – Package exports and API surfacing (`core/rl/policies/__init__.py`, `training/rl/__init__.py`).
+   - Task 2.4 – Weight sharing + initialization utilities following SymbolAgent delivery.
 
 ---
 
@@ -1187,23 +1197,23 @@ early_stopping_patience: 8
 
 ### Immediate Actions (Next 7 Days)
 
-#### Action 1: Phase 0 Data Remediation
+#### Action 1: Task 2.2 SymbolAgent Delivery
 **Timeline:** October 8, 2025  
 **Priority:** P0
 
-**Tasks:** Re-ingest missing parquet directories for 19 symbols, repair 57 coverage gaps flagged in `docs/data_quality_report_rl.md`, and rerun `scripts/validate_rl_data_readiness.py` to close out 0.2.x remediation items.
+**Tasks:** Implement `core/rl/policies/symbol_agent.py` (actor-critic heads, action masking, PPO interfaces), accompany with `tests/test_symbol_agent.py` covering forward pass, parameter counts, and action masking, and wire configuration defaults.
 
-#### Action 2: RL Directory Scaffolding
-**Timeline:** October 10, 2025  
+#### Action 2: Task 2.3 Package Surface & Bench Validation
+**Timeline:** October 9, 2025  
 **Priority:** P0
 
-**Tasks:** Create `core/rl/` and `training/rl/` package skeletons, add initial `__init__.py`, placeholder environment stubs, and update `.gitignore` to isolate rollout artifacts per Phase 0 Task 0.4.
+**Tasks:** Update `core/rl/policies/__init__.py`, `core/rl/__init__.py`, and `training/rl/__init__.py` exports, add lightweight smoke benchmark to confirm combined encoder+agent latency stays <10 ms, and align docs/reference notebooks.
 
-#### Action 3: Baseline Documentation Refresh
-**Timeline:** October 11, 2025  
+#### Action 3: Phase 4 Remediation Experiment Cycle
+**Timeline:** October 10, 2025  
 **Priority:** P1
 
-**Tasks:** Compile SL benchmark summary leveraging `reports/sl_checkpoint_validation.json` and `reports/sl_inference_benchmarks.json`, populate `docs/baseline_for_rl_comparison.md`, and set explicit RL success targets per Phase 0 Task 0.5.
+**Tasks:** Execute threshold/regime filter experiments, capture outcomes in `analysis/reports/backtest_remediation_2025-10-10.md`, and decide whether RL-only path can proceed without further SL fixes.
 
 ---
 
@@ -1256,4 +1266,4 @@ early_stopping_patience: 8
 **Document Maintenance:**
 - This consolidated document replaces: `activeContext.md`, `progress.md`, `decisionLog.md`, `phase3_hpo_results_analysis.md`, `phase3_completion_report.md`, `phase3_next_steps.md`, `strategic_plan_nn_rl.md`, `sl_to_rl_pivot_analysis.md`, diagnostic reports
 - Update frequency: Weekly during active development
-- Last consolidation: October 5, 2025
+- Last consolidation: October 6, 2025

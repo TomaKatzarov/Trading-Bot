@@ -160,7 +160,7 @@ class TestTransactionCostPenalty:
         )
 
         assert components["transaction_cost"] < 0
-        assert -0.2 < components["transaction_cost"] < -0.1
+        assert components["transaction_cost"] == pytest.approx(-0.1, rel=0.05)
 
     def test_sell_cost_penalty(self) -> None:
         """SELL actions incur cost penalty."""
@@ -189,8 +189,7 @@ class TestTransactionCostPenalty:
             current_equity=102_500,
             trade_info={"pnl_pct": 0.025, "holding_hours": 3},
         )
-
-        assert components["transaction_cost"] > -0.15
+        assert components["transaction_cost"] > -0.1
 
     def test_failed_action_penalty(self) -> None:
         """Failed actions incur small penalty."""
@@ -203,8 +202,7 @@ class TestTransactionCostPenalty:
             prev_equity=100_000,
             current_equity=100_000,
         )
-
-        assert components["transaction_cost"] == pytest.approx(-0.1)
+        assert components["transaction_cost"] == pytest.approx(-0.05)
 
     def test_add_position_extra_cost(self) -> None:
         """Add-position actions carry higher cost."""
@@ -217,8 +215,7 @@ class TestTransactionCostPenalty:
             prev_equity=100_000,
             current_equity=100_000,
         )
-
-        assert components["transaction_cost"] < -0.15
+        assert components["transaction_cost"] == pytest.approx(-0.15, rel=0.05)
 
 
 class TestTimeEfficiencyReward:
