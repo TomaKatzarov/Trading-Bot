@@ -50,18 +50,18 @@ def sample_data_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "vwap": base_price + rng.normal(0, 0.05, n),
             "SMA_10": pd.Series(base_price).rolling(10, min_periods=1).mean().to_numpy(),
             "SMA_20": pd.Series(base_price).rolling(20, min_periods=1).mean().to_numpy(),
-            "MACD": rng.normal(0, 0.5, n),
+            "MACD_line": rng.normal(0, 0.5, n),  # Fixed: was "MACD"
             "MACD_signal": rng.normal(0, 0.3, n),
             "MACD_hist": rng.normal(0, 0.2, n),
             "RSI_14": rng.uniform(30, 70, n),
-            "Stochastic_K": rng.uniform(20, 80, n),
-            "Stochastic_D": rng.uniform(20, 80, n),
+            "Stoch_K": rng.uniform(20, 80, n),  # Fixed: was "Stochastic_K"
+            "Stoch_D": rng.uniform(20, 80, n),  # Fixed: was "Stochastic_D"
             "ADX_14": rng.uniform(10, 40, n),
             "ATR_14": rng.uniform(0.5, 2.0, n),
             "BB_bandwidth": rng.uniform(0.01, 0.05, n),
             "OBV": rng.integers(-1000, 1000, n).cumsum(),
             "Volume_SMA_20": pd.Series(rng.integers(1_000, 10_000, n)).rolling(20, min_periods=1).mean().to_numpy(),
-            "Return_1h": rng.normal(0, 0.01, n),
+            "1h_return": rng.normal(0, 0.01, n),  # Fixed: was "Return_1h"
             "sentiment_score_hourly_ffill": rng.uniform(0.4, 0.6, n),
             "DayOfWeek_sin": np.sin(np.arange(n) * 2 * np.pi / 24 / 7),
             "DayOfWeek_cos": np.cos(np.arange(n) * 2 * np.pi / 24 / 7),
@@ -276,18 +276,18 @@ class TestEdgeCases:
                 "vwap": close,
                 "SMA_10": close,
                 "SMA_20": close,
-                "MACD": np.zeros(n),
+                "MACD_line": np.zeros(n),  # Fixed: was "MACD"
                 "MACD_signal": np.zeros(n),
                 "MACD_hist": np.zeros(n),
                 "RSI_14": np.ones(n) * 50,
-                "Stochastic_K": np.ones(n) * 50,
-                "Stochastic_D": np.ones(n) * 50,
+                "Stoch_K": np.ones(n) * 50,  # Fixed: was "Stochastic_K"
+                "Stoch_D": np.ones(n) * 50,  # Fixed: was "Stochastic_D"
                 "ADX_14": np.ones(n) * 20,
                 "ATR_14": np.ones(n),
                 "BB_bandwidth": np.ones(n) * 0.02,
                 "OBV": np.zeros(n),
                 "Volume_SMA_20": np.ones(n) * 1000,
-                "Return_1h": np.zeros(n),
+                "1h_return": np.zeros(n),  # Fixed: was "Return_1h"
                 "sentiment_score_hourly_ffill": np.ones(n) * 0.5,
                 "DayOfWeek_sin": np.zeros(n),
                 "DayOfWeek_cos": np.ones(n),

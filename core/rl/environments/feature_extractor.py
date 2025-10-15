@@ -10,12 +10,18 @@ cache to accelerate repeated window requests during training or evaluation.
 from __future__ import annotations
 
 import logging
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+
+try:  # pragma: no cover - optional dependency guard
+    from scripts.sl_checkpoint_utils import run_inference  # type: ignore
+except ImportError:  # pragma: no cover - gracefully degrade when utility unavailable
+    run_inference = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -160,18 +166,18 @@ class FeatureExtractor:
     _TECH_COLUMNS: Tuple[str, ...] = (
         "SMA_10",
         "SMA_20",
-        "MACD",
+        "MACD_line",
         "MACD_signal",
         "MACD_hist",
         "RSI_14",
-        "Stochastic_K",
-        "Stochastic_D",
+        "Stoch_K",
+        "Stoch_D",
         "ADX_14",
         "ATR_14",
         "BB_bandwidth",
         "OBV",
         "Volume_SMA_20",
-        "Return_1h",
+        "1h_return",
     )
 
     _SENTIMENT_COLUMNS: Tuple[str, ...] = (
@@ -184,6 +190,8 @@ class FeatureExtractor:
     )
 
     _ALLOWED_NORMALIZERS: Tuple[str, ...] = ("zscore", "minmax", "robust", "none")
+    _SL_MODEL_ORDER: Tuple[str, ...] = ("mlp", "lstm", "gru")
+    _SL_PREFETCH_CHUNK: int = 2048
 
     def __init__(
         self,
@@ -210,11 +218,19 @@ class FeatureExtractor:
         self._feature_matrix = self.data[self.feature_cols].to_numpy(copy=False)
         self._cache = _LRUWindowCache(config.cache_size)
         self._cache_stats = _CacheStats()
-        self.sl_models: Dict[str, Any] = sl_models or {}
-
+        self._sl_cache: Dict[int, np.ndarray] = {}
+        self.sl_models: Dict[str, Any] = {}
+        self._sl_prefetch: Optional[np.ndarray] = None
+        
+        # CRITICAL FIX: Initialize _normalization_params BEFORE update_sl_models()
+        # because update_sl_models() calls _prefetch_sl_predictions() which calls extract_window()
+        # which checks _normalization_params
         self._normalization_params: Optional[Dict[str, Dict[str, np.ndarray]]] = None
         if config.normalize_method != "none":
             self._normalization_params = self._compute_normalization_params()
+        
+        # Now safe to update SL models (may trigger prefetch which uses normalization)
+        self.update_sl_models(sl_models)
 
         logger.info(
             "FeatureExtractor initialized | features=%s | normalize=%s | window=%s",
@@ -292,31 +308,38 @@ class FeatureExtractor:
     ) -> np.ndarray:
         """Return SL model probabilities for the specified window."""
 
+        cache_key = int(end_idx)
+        if self._sl_prefetch is not None and 0 <= cache_key < self._sl_prefetch.shape[0]:
+            return self._sl_prefetch[cache_key].copy()
+
+        cached = self._sl_cache.get(cache_key)
+        if cached is not None:
+            return cached.copy()
+
         if window is None:
             window = self.extract_window(end_idx, normalize=True)
 
         if not self.sl_models:
-            return np.array([0.5, 0.5, 0.5], dtype=np.float32)
+            result = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+            self._sl_cache[cache_key] = result
+            return result.copy()
 
         input_tensor = window[np.newaxis, :, :]
         probs: List[float] = []
 
-        try:  # Local import to avoid heavy dependency when unused
-            from scripts.sl_checkpoint_utils import run_inference as _run_inference  # type: ignore
-        except Exception:  # pragma: no cover - graceful degradation when unavailable
-            _run_inference = None
+        if run_inference is None:
+            result = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+            self._sl_cache[cache_key] = result
+            return result.copy()
 
-        if _run_inference is None:
-            return np.array([0.5, 0.5, 0.5], dtype=np.float32)
-
-        for model_name in ("mlp", "lstm", "gru"):
+        for model_name in self._SL_MODEL_ORDER:
             bundle = self.sl_models.get(model_name)
             if bundle is None:
                 probs.append(0.5)
                 continue
 
             try:
-                inference_out = _run_inference(bundle, input_tensor)
+                inference_out = run_inference(bundle, input_tensor)
                 if isinstance(inference_out, dict) and "probability" in inference_out:
                     probs.append(float(inference_out["probability"]))
                 elif isinstance(inference_out, (tuple, list)) and len(inference_out) > 0:
@@ -328,9 +351,12 @@ class FeatureExtractor:
                 probs.append(0.5)
 
         if not probs:
-            return np.array([0.5, 0.5, 0.5], dtype=np.float32)
+            result = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+        else:
+            result = np.array(probs, dtype=np.float32)
 
-        return np.array(probs, dtype=np.float32)
+        self._sl_cache[cache_key] = result
+        return result.copy()
 
     def prefetch(self, end_indices: Iterable[int], normalize: bool = True) -> None:
         """Warm the cache by extracting a series of indices without returning them."""
@@ -373,6 +399,7 @@ class FeatureExtractor:
 
         self._cache.clear()
         self._cache_stats = _CacheStats()
+        self._sl_cache.clear()
 
     def update_data(self, data: pd.DataFrame) -> None:
         """Replace the underlying dataframe and recompute dependent state.
@@ -391,6 +418,8 @@ class FeatureExtractor:
             self._normalization_params = self._compute_normalization_params()
         else:
             self._normalization_params = None
+
+        self._prefetch_sl_predictions()
 
     def reconfigure(self, config: FeatureConfig) -> None:
         """Update configuration and recompute derived artifacts."""
@@ -411,6 +440,109 @@ class FeatureExtractor:
             self._normalization_params = self._compute_normalization_params()
         else:
             self._normalization_params = None
+
+        self._prefetch_sl_predictions()
+
+    def update_sl_models(self, sl_models: Optional[Dict[str, Any]]) -> None:
+        """Attach SL model bundles used for auxiliary predictions."""
+
+        self.sl_models = sl_models or {}
+        self._sl_cache.clear()
+        self._prefetch_sl_predictions()
+
+    def _prefetch_sl_predictions(self) -> None:
+        """Compute SL model probabilities in batches for fast lookup during training."""
+
+        self._sl_prefetch = None
+
+        if not self.sl_models or run_inference is None:
+            return
+
+        num_rows = len(self.data)
+        num_models = len(self._SL_MODEL_ORDER)
+        prefetch = np.full((num_rows, num_models), 0.5, dtype=np.float32)
+
+        lookback = self.lookback_window
+        if num_rows <= lookback:
+            self._sl_prefetch = prefetch
+            return
+
+        valid_indices = np.arange(lookback, num_rows)
+        if valid_indices.size == 0:
+            self._sl_prefetch = prefetch
+            return
+
+        enabled_models = sum(1 for name in self._SL_MODEL_ORDER if name in self.sl_models)
+        logger.info(
+            "Prefetching SL probabilities (%s samples, %s models)",
+            valid_indices.size,
+            enabled_models,
+        )
+
+        start_time = time.perf_counter()
+        chunk = max(self._SL_PREFETCH_CHUNK, lookback)
+
+        for start in range(0, valid_indices.size, chunk):
+            end = min(start + chunk, valid_indices.size)
+            chunk_indices = valid_indices[start:end]
+            windows = self.extract_batch(chunk_indices, normalize=True)
+            if windows.size == 0:
+                continue
+
+            for model_idx, model_name in enumerate(self._SL_MODEL_ORDER):
+                bundle = self.sl_models.get(model_name)
+                if bundle is None:
+                    continue
+
+                try:
+                    result = run_inference(bundle, windows)
+                except Exception as exc:  # pragma: no cover - logging side effect
+                    logger.warning(
+                        "SL prefetch failed for %s chunk [%s:%s]: %s",
+                        model_name,
+                        start,
+                        end,
+                        exc,
+                    )
+                    probs = np.full((windows.shape[0],), 0.5, dtype=np.float32)
+                else:
+                    probs = self._coerce_probability_array(result, windows.shape[0])
+
+                prefetch[chunk_indices, model_idx] = probs
+
+        self._sl_prefetch = prefetch
+
+        elapsed = time.perf_counter() - start_time
+        logger.info("SL probability prefetch complete in %.2fs", elapsed)
+
+    @staticmethod
+    def _coerce_probability_array(result: Dict[str, Any], expected: int) -> np.ndarray:
+        """Normalize run_inference outputs into a flat probability array."""
+
+        value: Any
+        if isinstance(result, dict):
+            value = result.get("probability")
+        else:
+            value = result
+
+        if value is None:
+            arr = np.full((expected,), 0.5, dtype=np.float32)
+        else:
+            arr = np.asarray(value)
+            if arr.size == 0:
+                arr = np.full((expected,), 0.5, dtype=np.float32)
+            else:
+                arr = arr.astype(np.float32, copy=False).reshape(-1)
+
+        if arr.shape[0] < expected:
+            pad = np.full((expected - arr.shape[0],), 0.5, dtype=np.float32)
+            arr = np.concatenate([arr, pad], axis=0)
+        elif arr.shape[0] > expected:
+            arr = arr[:expected]
+
+        arr = np.nan_to_num(arr, nan=0.5, posinf=1.0, neginf=0.0)
+        np.clip(arr, 0.0, 1.0, out=arr)
+        return arr.astype(np.float32, copy=False)
 
     # ------------------------------------------------------------------
     # Internal helpers

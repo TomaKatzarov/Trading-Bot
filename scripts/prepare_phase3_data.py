@@ -136,6 +136,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("models/sl_checkpoints"),
     )
+    parser.add_argument(
+        "--symbols",
+        nargs="+",
+        help="Optional subset of symbols to process (defaults to Phase 3 portfolio)",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 
@@ -479,8 +484,14 @@ def main() -> None:
         checkpoint_root=args.checkpoint_root,
     )
 
+    target_symbols: Iterable[str]
+    if args.symbols:
+        target_symbols = [sym.upper() for sym in args.symbols]
+    else:
+        target_symbols = PHASE3_SYMBOLS
+
     metadata_records: List[SymbolMetadata] = []
-    for symbol in PHASE3_SYMBOLS:
+    for symbol in target_symbols:
         metadata_records.append(preparer.prepare_symbol(symbol))
 
     phase3_metadata = {

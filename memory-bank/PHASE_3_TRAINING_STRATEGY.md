@@ -1,9 +1,10 @@
 # Phase 3: Training Strategy & Optimization Guide
 
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Created:** October 6, 2025  
+**Updated:** October 9, 2025  
 **Phase:** 3 - Prototype Training & Validation  
-**Status:** Implementation Ready
+**Status:** Implementation Ready (Stage 5 validation pending)
 
 ---
 
@@ -17,6 +18,20 @@ This document provides detailed training strategies, optimization techniques, an
 3. **Reward Engineering:** Balance 7-component reward to avoid hacking
 4. **Sample Efficiency:** Achieve results with 100k steps (limited compute budget)
 5. **Generalization:** Perform across bull/bear/sideways regimes
+6. **Policy Collapse Prevention (NEW 2025-10-08):** Environment-level constraints to prevent degenerate single-action policies
+
+### Stage Progress Snapshot (2025-10-09)
+
+| Stage | Focus | Status | Evidence / Baseline |
+|-------|-------|--------|----------------------|
+| Stage 1 | Exploration recovery (actor gain 0.1, entropy schedule, reward normalization disabled) | ✅ Complete | `analysis/validate_exploration_fix.py`; smoke target entropy ≥1.3 with ≥4 actions/120 steps |
+| Stage 2 | Professional reward stack (realized-only PnL, exit multipliers) | ✅ Complete | 3 k-step benchmark: Sharpe +0.563, win rate 64.5%, max DD 0.45% |
+| Stage 3 | Anti-collapse invariants (diversity bonus 0.07, action repeat penalty 0.05, SELL mask audit) | ✅ Complete | `tests/test_reward_shaper.py` 42/42 (2025-10-09); SELL availability log entries |
+| Stage 4 | Telemetry + Stage 5 runner (entropy guard, voluntary trade telemetry) | ✅ Complete | `scripts/run_phase3_stage5_validation.py` instrumentation validated via dry run (skip-training) |
+| Stage 5 | Short retrain (5–10 k steps per seed) + telemetry diff | 🚧 Pending | Command staged; baseline success criteria enumerated in Section 9 |
+
+**CRITICAL UPDATE (2025-10-08 → 2025-10-09):**  
+Anti-collapse improvements implemented after catastrophic policy collapse (99.88% BUY_SMALL, 0.007 entropy). Follow-up on 2025-10-09 introduced entropy guard automation, telemetry baselines, diversity/repeat reward components, and Stage 5 validation workflow. See Section 9 for full details.
 
 ---
 
@@ -96,30 +111,29 @@ def clip_schedule(progress: float) -> float:
 
 ---
 
-**Entropy Coefficient: 0.01**
+**Entropy Stack (UPDATED 2025-10-09)**
 
 ```python
-ent_coef = 0.01  # Entropy bonus weight
+ent_coef = 0.08  # Initial exploration weight (paired with scheduler)
+entropy_scheduler = dict(strategy="hold_then_linear", initial=0.08, final=0.03,
+                         hold_steps=10_000, decay_steps=40_000, min=0.03)
+entropy_bonus = dict(enabled=True, target_entropy=0.55, bonus_scale=0.35,
+                     warmup_steps=4_000, decay_rate=0.12, max_multiplier=3.0,
+                     floor=0.02)
+action_entropy_guard = dict(enabled=True, threshold=0.22, warmup_steps=4_000,
+                            boost_multiplier=1.7, max_multiplier=3.0,
+                            cooldown_steps=6_000, patience=2)
 ```
 
-**CRITICAL for avoiding degenerate policies!**
+**Why the stack matters:**
+- `ent_coef` starts at 0.08 but is held flat for the first 10 k steps, then linearly decays to a 0.03 floor—enough exploration without overwhelming policy loss.
+- Adaptive entropy bonus auto-scales the reward signal toward target entropy 0.55, compensating when policy entropy dips due to non-stationary rewards.
+- Action entropy guard halts catastrophic collapse in real time. When mean policy entropy <0.22 after warmup, it boosts `ent_coef` (up to 3×) and can halt training if entropy fails to recover.
 
-**Rationale:**
-- Encourages exploration by penalizing deterministic policies
-- Too low (<0.001): Premature convergence to suboptimal policy (all HOLD)
-- Too high (>0.05): Agent never commits to strategy
-
-**Warning Signs:**
-- Entropy → 0 quickly: Increase to 0.05
-- All actions = HOLD: Increase to 0.10 temporarily
-- Random behavior after 50k steps: Decrease to 0.001
-
-**Entropy Decay Schedule:**
-```python
-def ent_schedule(progress: float) -> float:
-    """Start high (0.05), decay to low (0.001)"""
-    return 0.05 * (1 - progress) + 0.001 * progress
-```
+**Operational guidance:**
+- Expect `policy_action_entropy_mean` ≈0.6–0.8 during the first 5 k steps, settling near 0.35–0.45 by 20 k steps.
+- Guard triggers should be rare; more than two per 10 k-step window signals deeper reward or masking issues (investigate Section 9 checklists).
+- Maintain synergy with Section 9 constraints (diversity bonus, repeat penalty, SELL mask). Disabling any component voids Stage 5 baselines.
 
 ---
 
@@ -245,30 +259,38 @@ With 1-hour bars, this is ~4 days of trading horizon.
 
 ## 2. Reward Engineering & Tuning
 
-### 2.1 7-Component Reward Breakdown
+### 2.1 Reward Component Stack (UPDATED 2025-10-09)
 
 From [`RewardShaper`](core/rl/environments/reward_shaper.py:1):
 
 ```python
 reward = (
-    0.40 * r_pnl +         # Equity growth
-    0.15 * r_cost +        # Transaction cost penalty
-    0.15 * r_time +        # Time efficiency
-    0.05 * r_sharpe +      # Risk-adjusted return
-    0.10 * r_drawdown +    # Drawdown penalty
-    0.05 * r_sizing +      # Position sizing quality
-    0.00 * r_hold          # Hold penalty (disabled)
+    0.75 * r_pnl +               # Equity growth (ROI-scaled)
+    0.10 * r_cost +              # Transaction cost penalty (keeps churn honest)
+    0.00 * r_time +              # Time efficiency (still disabled)
+    0.03 * r_sharpe +            # Risk-adjusted return (light regularizer)
+    0.02 * r_drawdown +          # Drawdown penalty (light pressure)
+    0.00 * r_sizing +            # Position sizing quality (disabled)
+    0.00 * r_hold +              # Hold penalty (disabled)
+    0.07 * r_diversity +         # Action diversity bonus (anti-collapse)
+    0.05 * r_action_repeat +     # Penalty for exceeding repetition caps
+    0.01 * r_intrinsic_action    # Tiny intrinsic reward for valid non-HOLD actions
 )
 ```
 
-**Design Rationale:**
-- **PnL (40%):** Primary objective - make money
-- **Cost (15%):** Addresses SL failure #1 - transaction cost blindness
-- **Time (15%):** Addresses SL failure #2 - poor timing
-- **Sharpe (5%):** Regularization toward risk-adjusted returns
-- **Drawdown (10%):** Risk management, avoid catastrophic losses
-- **Sizing (5%):** Encourages proper position sizing
-- **Hold (0%):** Disabled to avoid discouraging patience
+**Design Rationale (Stage 5 Baseline):**
+- **PnL (75%):** Profit remains the dominant signal, now boosted back up because diversity is enforced elsewhere.
+- **Cost (10%):** Enough friction to curb churn without overwhelming PnL after diversity/repetition controls.
+- **Time (0%):** Still disabled—time pressure conflicted with Stage 5 voluntary-trade goals.
+- **Sharpe (3%):** Lightly nudges risk-adjusted behavior without destabilizing early learning.
+- **Drawdown (2%):** Provides gentle downside awareness.
+- **Sizing/Hold (0%):** Disabled to avoid biasing HOLD vs BUY decisions during collapse recovery.
+- **Diversity (7%):** Incentivizes ≥3 actions per 50-step window; pairs with telemetry targets.
+- **Action Repeat (5%):** Penalizes exceeding rolling repetition quotas; hits chronic BUY spam even if mask fails.
+- **Intrinsic Action (1%):** Offsets transaction costs for valid, non-HOLD actions so the agent will probe alternatives.
+
+**CRITICAL INSIGHT (2025-10-08):**  
+Hyperparameter tuning (actor gain, entropy, reward weights) CANNOT fix environment design flaws. After 8 failed hyperparameter configurations, root cause identified as environment allowing infinite action repetition. Solution requires environment-level hard constraints (see Section 9).
 
 ### 2.2 Component Analysis
 
@@ -283,9 +305,9 @@ def compute_pnl_reward(self, equity_change: float) -> float:
 **Range:** [-0.10, +0.10] typically (±10% equity change per step)
 
 **Issues to Watch:**
-- **Dominates other components:** Reduce weight to 0.30
-- **Too volatile:** Add smoothing or clipping
-- **Encourages reckless trades:** Increase cost/drawdown weights
+- **Dominates other components:** Step weight back to 0.60 temporarily.
+- **Too volatile:** Add smoothing or clip component output to ±1.5.
+- **Encourages reckless trades:** Increase cost (0.15) or action-repeat penalty (0.07) rather than gutting PnL.
 
 ---
 
@@ -300,12 +322,12 @@ def compute_cost_reward(self, commission: float, slippage: float) -> float:
 
 **Critical for avoiding SL failure mode!**
 
-**Range:** [-0.002, 0] (0% cost = 0 reward, 0.2% cost = -0.002)
+**Range:** [-0.001, 0] (0% cost = 0 reward, 0.1% cost = -0.001)
 
 **Tuning:**
-- SL models ignored this → lost money to churn
-- If agent trades too much (>1000 trades/year): Increase weight to 0.25
-- If agent never trades: Decrease to 0.10
+- If agent trades too much (>1 200 trades/year): Increase weight to 0.15.
+- If agent never trades: Decrease to 0.05 (but inspect voluntary-trade rate first).
+- Combine adjustments with `failed_action_penalty` and action-repeat penalties before touching PnL weight.
 
 ---
 
@@ -325,8 +347,8 @@ def compute_time_reward(self, hold_duration: int, profitable: bool) -> float:
 **Range:** [0, 1.0] for wins, [-1.0, 0] for losses
 
 **Issues:**
-- **Agent exits winners too early:** Reduce weight to 0.05
-- **Agent holds losers forever:** Increase weight to 0.25
+- **Agent exits winners too early:** Reintroduce with 0.05 weight after Stage 5 baseline validated.
+- **Agent holds losers forever:** Prefer using drawdown penalty or forced-exit scaling before increasing time weight.
 
 ---
 
@@ -373,20 +395,62 @@ def compute_drawdown_penalty(self, current_dd: float) -> float:
 
 ---
 
+**Action Repeat Penalty (r_action_repeat):**
+
+```python
+def compute_action_repeat_penalty(self, diversity_info: Dict[str, Any]) -> float:
+    streak = diversity_info.get("consecutive_action_count", 0)
+    limit = diversity_info.get("max_consecutive_actions", 3)
+    if streak <= limit:
+        return 0.0
+    overflow = streak - limit
+    severity = min(overflow / limit, 1.0)
+    return -0.5 * severity
+```
+
+**Purpose:** Applies graded penalties when the executed action exceeds the permitted streak length (default 3). Severity escalates as the streak length doubles the limit, capped at -0.5 before weighting.
+
+**Tuning:**
+- Raise weight to 0.07 if repetition violations persist even after mask fixes.
+- Lower to 0.03 if penalty dominates total reward or creates oscillation between HOLD/BUY.
+- Inspect `charts/consecutive_action_violations` and `sanitizer_trade_delta` before altering—penalty should spur SELL usage, not blind randomness.
+
+---
+
+**Intrinsic Action Reward (r_intrinsic_action):**
+
+```python
+def compute_intrinsic_action_reward(self, diversity_info: Dict[str, Any]) -> float:
+    if diversity_info.get("executed_action_valid", False):
+        return 0.1
+    return 0.0
+```
+
+**Purpose:** Provides a small positive reward (scaled by 0.01) whenever the agent executes a valid non-HOLD action. Offsets transaction costs during exploratory probes so the policy keeps sampling SELL/ADD opportunities.
+
+**Tuning:**
+- Reduce to 0.0 once voluntary trade rate stabilizes >15% (prevents overtrading late in training).
+- Increase to 0.02 temporarily if agent refuses to trade after curriculum relaxes.
+- Pair with `failed_action_penalty` adjustments to ensure invalid attempts remain costly.
+
+---
+
 ### 2.3 Reward Scaling & Normalization
 
-**Option 1: Running Mean/Std (Recommended)**
+> **Stage 5 Baseline (2025-10-09):** Reward normalization is **disabled**. We keep VecNormalize for observations only to preserve raw reward magnitudes for the entropy guard and telemetry.
+
+**Option 1: Running Mean/Std (Reference Only)**
 
 ```python
 from stable_baselines3.common.vec_env import VecNormalize
 
 env = VecNormalize(
     env,
-    norm_obs=True,      # Normalize observations
-    norm_reward=True,   # Normalize rewards (running mean/std)
-    clip_obs=10.0,      # Clip normalized obs to [-10, 10]
-    clip_reward=10.0,   # Clip normalized reward to [-10, 10]
-    gamma=0.99,         # For return normalization
+    norm_obs=True,      # Normalize observations (enabled)
+    norm_reward=False,  # KEEP DISABLED unless Stage 5 guard remains stable for multiple runs
+    clip_obs=10.0,
+    clip_reward=10.0,
+    gamma=0.99,
 )
 ```
 
@@ -398,6 +462,7 @@ env = VecNormalize(
 **Disadvantages:**
 - Can hide reward scale issues
 - Needs warm-up period (first 1000 steps)
+- Breaks Stage 5 telemetry/guard assumptions if enabled too early
 
 ---
 
@@ -424,19 +489,20 @@ def scale_reward(raw_reward: float) -> float:
 # In training loop
 self.logger.log({
     "reward/total": total_reward,
-    "reward/pnl": r_pnl * 0.40,
-    "reward/cost": r_cost * 0.15,
-    "reward/time": r_time * 0.15,
-    "reward/sharpe": r_sharpe * 0.05,
-    "reward/drawdown": r_drawdown * 0.10,
-    "reward/sizing": r_sizing * 0.05,
+    "reward/pnl": r_pnl * 0.75,
+    "reward/cost": r_cost * 0.10,
+    "reward/sharpe": r_sharpe * 0.03,
+    "reward/drawdown": r_drawdown * 0.02,
+    "reward/diversity": r_diversity * 0.07,
+    "reward/action_repeat": r_action_repeat * 0.05,
+    "reward/intrinsic": r_intrinsic_action * 0.01,
 })
 ```
 
 **Analyze:**
-- Which component dominates? (Should be PnL ~40-50%)
-- Are any components always zero? (Bug or design?)
-- Do components correlate? (PnL and Sharpe should)
+- Which component dominates? (PnL should contribute ~70-80%)
+- Are any components always zero? (Telemetries miswired or component disabled)
+- Do components correlate? (PnL vs action-repeat penalty should move inversely when collapse risk grows)
 
 ---
 
@@ -981,6 +1047,410 @@ Create `analysis/reports/phase3_lessons_learned.md`:
 3. Hyperparameter insights
 4. Environment issues discovered
 5. Recommendations for Phase 4
+
+---
+
+## 9. Anti-Collapse Improvements (CRITICAL UPDATE 2025-10-08)
+
+### 9.1 Problem: Catastrophic Policy Collapse
+
+**Incident Summary:**
+- **Date:** October 8, 2025
+- **Symptom:** Agents converged to 99.88% BUY_SMALL action within 10k training steps
+- **Entropy:** Dropped to 0.007 (from >1.5)
+- **Root Cause:** Environment design allowed infinite repetition of locally optimal actions
+- **Failed Solutions:** 8 hyperparameter configurations (actor gain, entropy coef, reward weights, transaction costs)
+
+**Key Insight:**  
+In discrete action spaces with locally optimal degenerate strategies (e.g., "always buy" in uptrending markets), **hyperparameters cannot prevent collapse**. The environment must enforce diversity through hard constraints.
+
+---
+
+### 9.2 Solution: 4 Environment-Level Constraints
+
+All improvements implemented in:
+- `core/rl/environments/trading_env.py`
+- `core/rl/environments/reward_shaper.py`
+- `core/rl/policies/symbol_agent.py`
+- `training/config_templates/phase3_ppo_baseline.yaml`
+
+**Full Documentation:** `docs/anti_collapse_improvements_2025-10-08.md`
+
+---
+
+### 9.3 Improvement #1: Action Repetition Limit
+
+**Implementation:**
+```python
+# trading_env.py
+self.max_consecutive_actions = 3  # Hard limit
+self.consecutive_action_count = 0
+self.action_history = []
+self.action_diversity_window = deque(maxlen=50)
+
+# In step()
+if len(self.action_history) > 0 and self.action_history[-1] == action:
+    self.consecutive_action_count += 1
+else:
+    self.consecutive_action_count = 1
+
+# Enforce limit
+if self.consecutive_action_count > self.max_consecutive_actions:
+    logger.debug("Action repetition limit hit, forcing HOLD")
+    action = TradeAction.HOLD
+    self.consecutive_action_count = 1
+```
+
+**Impact:**
+- Prevents 99%+ single-action collapse
+- Forces minimum diversity of 3-5 actions
+- Creates forced exploration when agent fixates
+
+**Monitoring:**
+```python
+mlflow.log_metric("charts/consecutive_action_violations", violations)
+```
+
+---
+
+### 9.4 Improvement #2: Action Diversity Bonus
+
+**Implementation:**
+```python
+# reward_shaper.py
+def _compute_diversity_bonus(self, diversity_info: Dict) -> float:
+    """Reward using 3-5+ unique actions per 50 steps."""
+    window = diversity_info.get("action_diversity_window", [])
+    if len(window) < 10:
+        return 0.0
+    
+    unique_actions = len(set(window))
+    
+    if unique_actions >= 5:
+        return 0.3      # Excellent diversity
+    elif unique_actions == 4:
+        return 0.2      # Good diversity
+    elif unique_actions == 3:
+        return 0.1      # Acceptable diversity
+    else:
+        return 0.0      # Poor diversity
+```
+
+**Config:**
+```yaml
+reward_weights:
+  diversity_bonus: 0.05  # 5% weight
+```
+
+**Impact:**
+- Encourages natural exploration beyond forced minimum
+- Rewards agents for using full action toolkit
+- Synergizes with repetition limit
+
+**Monitoring:**
+```python
+mlflow.log_metric("charts/diversity_bonus", avg_bonus)
+mlflow.log_metric("charts/unique_actions_per_window", unique_count)
+```
+
+---
+
+### 9.5 Improvement #3: ROI-Scaled PnL Rewards
+
+**Problem:**  
+Old system rewarded absolute profit equally regardless of capital deployed. $100 profit on $1,000 position (10% ROI) got same reward as $100 profit on $10,000 position (1% ROI).
+
+**Implementation:**
+```python
+# reward_shaper.py
+def _compute_pnl_reward(self, prev_equity, current_equity, 
+                       trade_info, position_info=None):
+    # ... compute base_reward ...
+    
+    # ROI Scaling
+    if self.config.roi_multiplier_enabled and position_info:
+        shares = position_info.get("shares", 0)
+        entry_price = position_info.get("entry_price", 0)
+        position_size = shares * entry_price
+        
+        if position_size > 0:
+            roi = equity_change / position_size
+            roi_multiplier = 1.0 + (roi * self.config.roi_scale_factor)
+            roi_multiplier = max(0.5, min(roi_multiplier, 3.0))  # Clamp
+            
+            final_reward = base_reward * roi_multiplier
+            return final_reward
+    
+    return base_reward
+```
+
+**Config:**
+```yaml
+reward_weights:
+  roi_multiplier_enabled: true
+  roi_scale_factor: 2.0  # 10% ROI → 1.2x reward
+```
+
+**Example:**
+- **High ROI:** $100 profit on $1,000 position (10% ROI)
+  - ROI multiplier: 1.0 + (0.10 × 2.0) = 1.2
+  - Final reward: base × 1.2
+  
+- **Low ROI:** $100 profit on $10,000 position (1% ROI)
+  - ROI multiplier: 1.0 + (0.01 × 2.0) = 1.02
+  - Final reward: base × 1.02
+
+**Impact:**
+- Encourages capital-efficient trades
+- Discourages oversized positions with low returns
+- Aligns with real-world trading best practices
+
+**Monitoring:**
+```python
+mlflow.log_metric("charts/roi_multiplier", avg_multiplier)
+mlflow.log_metric("charts/position_size_vs_roi", scatter_plot)
+```
+
+---
+
+### 9.6 Improvement #4: Stricter Action Masking
+
+**Problem:**  
+Agents could use BUY_SMALL/MEDIUM/LARGE when position already exists, accidentally doubling positions.
+
+**Implementation:**
+```python
+# symbol_agent.py
+class ActionMasker:
+    def get_mask(self, observations):
+        # ... existing logic ...
+        
+        if has_position.any():
+            # Block BUY actions (indices 1, 2, 3)
+            for idx in self._buy_indices.tolist():
+                mask[has_position, idx] = False
+            # ADD_POSITION (idx=6) remains allowed
+            
+            logger.debug("Blocked BUY actions for %d envs with positions",
+                        has_position.sum().item())
+```
+
+**Impact:**
+- Makes scaling-in intentional (must use ADD_POSITION)
+- Prevents "spam BUY" strategies
+- Encourages position management awareness
+
+**Monitoring:**
+```python
+mlflow.log_metric("charts/action_masking_events", mask_count)
+```
+
+---
+
+### 9.7 Configuration Summary
+
+**Fees (Alpaca Realistic):**
+```yaml
+environment:
+  commission_rate: 0.00002   # 0.002% = 2 bps
+  slippage_pct: 0.0001       # 0.01% = 1 bp
+```
+
+**Entropy (Anti-Collapse):**
+```yaml
+ppo:
+    ent_coef: 0.08
+    entropy_scheduler:
+        strategy: hold_then_linear
+        initial: 0.08
+        final: 0.03
+        hold_steps: 10000
+        decay_steps: 40000
+        min: 0.03
+    entropy_bonus:
+        enabled: true
+        target_entropy: 0.55
+        bonus_scale: 0.35
+        warmup_steps: 4000
+        decay_rate: 0.12
+        max_multiplier: 3.0
+        floor: 0.02
+
+action_entropy_guard:
+    enabled: true
+    threshold: 0.22
+    warmup_steps: 4000
+    boost_multiplier: 1.7
+    max_multiplier: 3.0
+    cooldown_steps: 6000
+    halt_on_failure: true
+```
+
+**Reward Weights (Stage 5 Baseline):**
+```yaml
+reward_weights:
+    pnl: 0.75
+    cost: 0.10
+    time: 0.0
+    sharpe: 0.03
+    drawdown: 0.02
+    sizing: 0.0
+    hold: 0.0
+diversity_bonus: 0.07
+action_repeat_penalty: 0.05
+intrinsic_action_reward: 0.01
+roi_multiplier_enabled: true
+roi_scale_factor: 2.0
+```
+
+**Environment Constraints:**
+```python
+# trading_env.py (hardcoded)
+max_consecutive_actions = 3      # Hard limit
+action_diversity_window = 50     # Rolling window size
+```
+
+---
+
+### 9.8 Testing & Validation
+
+**Smoke Test (15k steps):**
+```bash
+python train_phase3_agents.py --symbols SPY --total-timesteps 15000
+```
+
+**Success Criteria:**
+- ✅ Action diversity: Executed actions cover ≥4 unique actions per 120-step window (Stage 5 telemetry).
+- ✅ `policy_action_entropy_mean`: ≥0.20 by step 6 k, no sustained dips <0.18.
+- ✅ Repetition guard: No streaks >3 without penalty; guard events <5% of steps.
+- ✅ Sharpe ratio: >-0.1 (better than -0.25 baseline) on smoke evaluation.
+- ✅ Voluntary trade rate: ≥10% with sanitizer delta <15 pp.
+
+**Monitoring Dashboards:**
+
+*TensorBoard:*
+- `charts/policy_action_entropy_mean` - Alert if <0.20 mid-run
+- `charts/executed_vs_policy_trades` - Track sanitizer delta (<15 pp target)
+- `charts/action_distribution` - Should show 4-5 actions sharing load (10-35%)
+- `charts/consecutive_action_violations` - Rare blips (<5% of steps)
+- `charts/diversity_bonus` - Average 0.08-0.15
+
+*MLflow:*
+- `policy_action_entropy_mean`
+- `executed_action_entropy_mean`
+- `voluntary_trade_rate_mean`
+- `sanitizer_trade_delta_mean`
+- `ep_total_trades_mean` - Should be 5-15 (not 0 or 100)
+- `ep_unique_actions_mean` - Should be ≥4
+
+**Validation Script:**
+```bash
+python validate_anti_collapse_improvements.py
+```
+
+Expected: All 5 tests pass ✅
+
+---
+
+### 9.9 Rollback Procedures
+
+**If improvements cause new issues:**
+
+**Disable diversity bonus:**
+```yaml
+diversity_bonus: 0.0
+```
+
+**Disable ROI scaling:**
+```yaml
+roi_multiplier_enabled: false
+```
+
+**Disable repetition limit (code change required):**
+```python
+# trading_env.py line 190
+self.max_consecutive_actions = 999  # Effectively disabled
+```
+
+**Revert action masking (code change required):**
+```python
+# symbol_agent.py line 110-123
+if has_position.any():
+    pass  # Allow BUY actions
+```
+
+**Full rollback:**
+```bash
+git checkout HEAD -- training/config_templates/phase3_ppo_baseline.yaml
+git checkout HEAD -- core/rl/environments/reward_shaper.py
+git checkout HEAD -- core/rl/environments/trading_env.py
+git checkout HEAD -- core/rl/policies/symbol_agent.py
+```
+
+---
+
+### 9.10 Lessons Learned
+
+**1. Hyperparameters Cannot Fix Environment Design Flaws**
+- Tried 8 different configurations (actor gain 0.01→0.3, entropy 0.05→0.25, costs 0.01%→0.5%)
+- NONE prevented policy collapse
+- Root cause: Environment allowed infinite repetition of locally optimal action
+
+**2. Discrete Action Spaces Need Explicit Diversity Mechanisms**
+- Entropy regularization alone is insufficient
+- Need BOTH:
+  - Hard constraints (repetition limits)
+  - Soft incentives (diversity bonuses)
+
+**3. Transaction Cost Penalties Ineffective Against Profitable Degenerate Strategies**
+- If "always buy" is genuinely profitable in uptrending markets, higher costs just make it slightly less profitable
+- Need structural constraints to prevent learning the strategy
+
+**4. Capital Efficiency Matters More Than Absolute Profit**
+- ROI scaling aligns RL objectives with real-world trading goals
+- Encourages better risk-adjusted returns
+- Prevents agents from learning "big position = big profit" heuristic
+
+---
+
+### 9.11 Integration with Existing Training
+
+**These improvements are NOW THE BASELINE for all Phase 3 training.**
+
+**Updated Training Workflow:**
+
+1. **Start Training:**
+   ```bash
+   python train_phase3_agents.py --config training/config_templates/phase3_ppo_baseline.yaml
+   ```
+
+2. **Monitor Anti-Collapse Metrics:**
+   - Check `charts/action_distribution` every 5k steps
+   - Verify entropy stays >0.8
+   - Confirm diversity bonus averaging 0.1-0.2
+
+3. **Early Warning System:**
+   - If action distribution >80% single action → ALERT
+   - If entropy <0.3 → ALERT
+   - If consecutive violations >50/episode → ALERT
+
+4. **Debugging Checklist:**
+   - [ ] Verify `max_consecutive_actions = 3` in trading_env.py
+   - [ ] Check `diversity_bonus_weight = 0.05` in config
+   - [ ] Confirm `roi_multiplier_enabled = true` in config
+   - [ ] Validate action masking logs: "blocked BUY actions"
+
+**All agents trained from 2025-10-08 onward MUST use these constraints.**
+
+---
+
+### 9.12 References
+
+- **Implementation:** `docs/anti_collapse_improvements_2025-10-08.md`
+- **Quick Reference:** `ANTI_COLLAPSE_QUICK_REFERENCE.md`
+- **Validation Script:** `validate_anti_collapse_improvements.py`
+- **Root Cause Analysis:** Policy collapse incident (99.88% BUY_SMALL, 0.007 entropy)
+- **Design Decision:** Environment constraints > hyperparameter tuning
 
 ---
 

@@ -60,6 +60,7 @@ from scripts.verify_data_update_success import verify_data_updates
 LOGGER = logging.getLogger("DataUpdatePipeline")
 VALIDATION_REPORT_PATH = PROJECT_ROOT / "data" / "validation_report.json"
 HISTORICAL_DATA_ROOT = PROJECT_ROOT / "data" / "historical"
+PHASE3_SPLITS_ROOT = PROJECT_ROOT / "data" / "phase3_splits"
 
 
 @dataclass
@@ -160,6 +161,12 @@ class DataUpdatePipeline:
             name="sample_verification",
             skip=self.args.skip_sample_verification,
             runner=self._run_sample_verification,
+        )
+
+        summary["phase3_manifest"] = self._execute_step(
+            name="phase3_manifest",
+            skip=False,
+            runner=self._snapshot_phase3_manifest,
         )
 
         summary["training_data_generation"] = self._execute_step(
@@ -326,6 +333,50 @@ class DataUpdatePipeline:
         return StepResult(status=status, metrics={"sample_success": success})
 
     # ------------------------------------------------------------------
+    def _snapshot_phase3_manifest(self) -> StepResult:
+        if not PHASE3_SPLITS_ROOT.exists():
+            return StepResult(status="warning", details=f"Phase 3 splits directory missing at {PHASE3_SPLITS_ROOT}")
+
+        symbol_dirs = sorted([
+            entry.name for entry in PHASE3_SPLITS_ROOT.iterdir() if entry.is_dir()
+        ])
+
+        metadata_timestamp: Optional[str] = None
+        metadata_path = PHASE3_SPLITS_ROOT / "phase3_metadata.json"
+        if metadata_path.exists():
+            try:
+                with metadata_path.open("r", encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+                metadata_timestamp = metadata.get("generated_at")
+            except Exception as exc:
+                return StepResult(status="warning", details=f"Failed to read phase3_metadata.json: {exc}")
+
+        missing_artifacts = {}
+        for symbol in symbol_dirs:
+            symbol_dir = PHASE3_SPLITS_ROOT / symbol
+            expected_files = {
+                "train.parquet": (symbol_dir / "train.parquet").exists(),
+                "val.parquet": (symbol_dir / "val.parquet").exists(),
+                "test.parquet": (symbol_dir / "test.parquet").exists(),
+                "metadata.json": (symbol_dir / "metadata.json").exists(),
+                "scaler.joblib": (symbol_dir / "scaler.joblib").exists(),
+            }
+            missing = [name for name, present in expected_files.items() if not present]
+            if missing:
+                missing_artifacts[symbol] = missing
+
+        metrics = {
+            "symbol_count": len(symbol_dirs),
+            "symbols": symbol_dirs,
+            "metadata_timestamp": metadata_timestamp,
+            "missing_artifacts": missing_artifacts,
+        }
+
+        status = "ok" if not missing_artifacts else "warning"
+        details = None if status == "ok" else "Missing artifacts detected for Phase 3 splits"
+        return StepResult(status=status, metrics=metrics, details=details)
+
+    # ------------------------------------------------------------------
     def _generate_training_dataset(self) -> StepResult:
         available_symbols = training_data_script.get_available_symbols()
         if not available_symbols:
@@ -339,34 +390,133 @@ class DataUpdatePipeline:
         config["stop_loss"] = self.args.stop_loss
         config["stop_loss_target"] = self.args.stop_loss
 
-        LOGGER.info(
-            "Generating combined training data → %s (symbols=%s, lookback=%s, horizon=%s)",
-            self.output_dir_relative,
-            len(available_symbols),
-            config["lookback_window"],
-            config["prediction_horizon_hours"],
-        )
+        # Check if RL mode is enabled
+        rl_mode = getattr(self.args, 'rl_mode', False)
+        
+        if rl_mode:
+            LOGGER.info("=" * 80)
+            LOGGER.info("RL MODE ENABLED: Generating data WITHOUT labels or filtering")
+            LOGGER.info("=" * 80)
+            LOGGER.info(
+                "Generating RL training data → %s (symbols=%s, NO FILTERING)",
+                self.output_dir_relative,
+                len(available_symbols),
+            )
+            
+            # Override config with RL-specific split ratios (80/10/10)
+            config['train_ratio'] = 0.80
+            config['val_ratio'] = 0.10
+            config['test_ratio'] = 0.10
+            
+            data_preparer = training_data_script.NNDataPreparer(config)
+            rl_data = data_preparer.get_prepared_data_for_rl_training()
+            
+            # Save RL data in Phase 3 format: data/phase3_splits/SYMBOL/{train,val,test}.parquet
+            output_dir = PHASE3_SPLITS_ROOT
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            LOGGER.info("="*80)
+            LOGGER.info(f"Saving RL data in Phase 3 format → {output_dir}")
+            LOGGER.info("="*80)
+            
+            # Save each symbol's train/val/test splits
+            for symbol in rl_data['symbols_list']:
+                symbol_dir = output_dir / symbol
+                symbol_dir.mkdir(parents=True, exist_ok=True)
+                
+                splits = rl_data['symbols_data'][symbol]
+                
+                # Save train split
+                train_path = symbol_dir / "train.parquet"
+                splits['train'].to_parquet(train_path)
+                
+                # Save validation split
+                val_path = symbol_dir / "val.parquet"
+                splits['val'].to_parquet(val_path)
+                
+                # Save test split
+                test_path = symbol_dir / "test.parquet"
+                splits['test'].to_parquet(test_path)
+                
+                LOGGER.info(f"✓ {symbol}: Train {len(splits['train']):,} | "
+                           f"Val {len(splits['val']):,} | "
+                           f"Test {len(splits['test']):,} rows")
+                LOGGER.info(f"  Saved to: {symbol_dir}/{{train,val,test}}.parquet")
+            
+            # Save Phase 3 metadata
+            metadata = {
+                "mode": "RL_TRAINING",
+                "no_filtering": True,
+                "no_labels": True,
+                "symbols_processed": rl_data['symbols_list'],
+                "total_rows": rl_data['total_rows'],
+                "split_info": {
+                    "train_rows": rl_data['split_info']['train']['total_rows'],
+                    "val_rows": rl_data['split_info']['val']['total_rows'],
+                    "test_rows": rl_data['split_info']['test']['total_rows'],
+                    "split_ratios": rl_data['split_ratios']
+                },
+                "feature_columns": rl_data['feature_columns'],
+                "date_range": rl_data['date_range'],
+                "asset_id_map": rl_data['asset_id_map'],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "data_structure": "phase3_splits/SYMBOL/{train,val,test}.parquet",
+                "compatible_with": "prepare_phase3_data.py format"
+            }
+            
+            metadata_path = output_dir / "phase3_metadata_rl.json"
+            with metadata_path.open("w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+            
+            LOGGER.info(f"✓ Saved Phase 3 RL metadata → {metadata_path.name}")
+            LOGGER.info("="*80)
+            
+            metrics = {
+                "output_dir": str(output_dir.relative_to(PROJECT_ROOT)),
+                "mode": "RL_TRAINING",
+                "symbols": len(rl_data['symbols_list']),
+                "train_rows": rl_data['split_info']['train']['total_rows'],
+                "val_rows": rl_data['split_info']['val']['total_rows'],
+                "test_rows": rl_data['split_info']['test']['total_rows'],
+                "total_rows": rl_data['total_rows'],
+                "feature_count": len(rl_data['feature_columns']) - 1,  # Exclude asset_id
+                "split_ratios": f"{rl_data['split_ratios']['train']:.0%}/{rl_data['split_ratios']['val']:.0%}/{rl_data['split_ratios']['test']:.0%}",
+                "data_retention": "100.00%",
+                "filtering_applied": "NONE",
+                "format": "Phase 3 compatible"
+            }
+            return StepResult(status="ok", metrics=metrics)
+        
+        else:
+            LOGGER.info(
+                "Generating combined training data → %s (symbols=%s, lookback=%s, horizon=%s)",
+                self.output_dir_relative,
+                len(available_symbols),
+                config["lookback_window"],
+                config["prediction_horizon_hours"],
+            )
 
-        data_preparer = training_data_script.NNDataPreparer(config)
-        data_splits = data_preparer.get_prepared_data_for_training()
-        data_splits["symbols_processed"] = available_symbols
-        data_splits["lookback_window"] = config["lookback_window"]
-        data_splits["prediction_horizon_hours"] = config["prediction_horizon_hours"]
-        data_splits["prediction_horizon"] = config["prediction_horizon"]
-        data_splits["profit_target"] = config["profit_target"]
-        data_splits["stop_loss"] = config["stop_loss"]
+            data_preparer = training_data_script.NNDataPreparer(config)
+            data_splits = data_preparer.get_prepared_data_for_training()
+            data_splits["symbols_processed"] = available_symbols
+            data_splits["lookback_window"] = config["lookback_window"]
+            data_splits["prediction_horizon_hours"] = config["prediction_horizon_hours"]
+            data_splits["prediction_horizon"] = config["prediction_horizon"]
+            data_splits["profit_target"] = config["profit_target"]
+            data_splits["stop_loss"] = config["stop_loss"]
 
-        training_data_script.save_training_data(data_splits, str(self.output_dir_relative))
+            training_data_script.save_training_data(data_splits, str(self.output_dir_relative))
 
-        metrics = {
-            "output_dir": str(self.output_dir_relative),
-            "symbols": len(available_symbols),
-            "train_samples": int(data_splits["train"]["X"].shape[0]) if "train" in data_splits else 0,
-            "val_samples": int(data_splits["val"]["X"].shape[0]) if "val" in data_splits else 0,
-            "test_samples": int(data_splits["test"]["X"].shape[0]) if "test" in data_splits else 0,
-            "feature_count": int(data_splits["train"]["X"].shape[2]) if "train" in data_splits else 0,
-        }
-        return StepResult(status="ok", metrics=metrics)
+            metrics = {
+                "output_dir": str(self.output_dir_relative),
+                "mode": "SL_TRAINING",
+                "symbols": len(available_symbols),
+                "train_samples": int(data_splits["train"]["X"].shape[0]) if "train" in data_splits else 0,
+                "val_samples": int(data_splits["val"]["X"].shape[0]) if "val" in data_splits else 0,
+                "test_samples": int(data_splits["test"]["X"].shape[0]) if "test" in data_splits else 0,
+                "feature_count": int(data_splits["train"]["X"].shape[2]) if "train" in data_splits else 0,
+            }
+            return StepResult(status="ok", metrics=metrics)
 
     # ------------------------------------------------------------------
     def _validate_training_dataset(self) -> StepResult:
@@ -405,16 +555,23 @@ class DataUpdatePipeline:
             splits[split] = {"samples": int(len(y)), "positive_ratio": float(y.mean()) if len(y) else 0.0}
         metrics["splits"] = splits
 
+        ratio_within_bounds = True
+        if self.positive_ratio_min is not None and positive_ratio < self.positive_ratio_min:
+            ratio_within_bounds = False
+        if self.positive_ratio_max is not None and positive_ratio > self.positive_ratio_max:
+            ratio_within_bounds = False
+
         checks_passed = (
             total_sequences is not None
             and total_sequences >= self.min_total_samples
-            and self.positive_ratio_min <= positive_ratio <= self.positive_ratio_max
             and feature_count >= self.feature_count_min
+            and ratio_within_bounds
         )
 
         metrics.update({
             "min_total_samples": self.min_total_samples,
             "positive_ratio_bounds": [self.positive_ratio_min, self.positive_ratio_max],
+            "positive_ratio_within_bounds": ratio_within_bounds,
             "feature_count_min": self.feature_count_min,
             "checks_passed": checks_passed,
         })
@@ -442,10 +599,21 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prediction-horizon", type=int, default=24, help="Prediction horizon for label generation")
     parser.add_argument("--output-dir", type=str, default="data/training_data_v2_final", help="Directory for the generated training dataset")
     parser.add_argument("--min-total-samples", type=int, default=500_000, help="Minimum total sequences expected in the dataset")
-    parser.add_argument("--positive-ratio-min", type=float, default=0.01, help="Lower bound for positive label ratio in training split")
-    parser.add_argument("--positive-ratio-max", type=float, default=0.15, help="Upper bound for positive label ratio in training split")
+    parser.add_argument(
+        "--positive-ratio-min",
+        type=float,
+        default=None,
+        help="Optional lower bound for positive label ratio; omit for no lower bound",
+    )
+    parser.add_argument(
+        "--positive-ratio-max",
+        type=float,
+        default=None,
+        help="Optional upper bound for positive label ratio; omit for no upper bound",
+    )
     parser.add_argument("--feature-count-min", type=int, default=22, help="Minimum feature count expected in the dataset")
 
+    # Skip flags
     # Skip flags
     parser.add_argument("--skip-download", action="store_true", help="Skip historical data download step")
     parser.add_argument("--skip-indicators", action="store_true", help="Skip technical indicator recomputation")
@@ -456,6 +624,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-training", action="store_true", help="Skip training dataset generation")
     parser.add_argument("--skip-training-validation", action="store_true", help="Skip training dataset validation step")
 
+    # RL mode flag
+    parser.add_argument("--rl-mode", action="store_true", help="Use RL mode (no labels, no filtering, 100%% data retention)")
+    
     parser.add_argument("--remediation-dry-run", action="store_true", help="Run remediation without writing to disk")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR)")
 

@@ -11,6 +11,7 @@ Phase: 2 - Implementation of core/data_preparation_nn.py (Part 1)
 
 import os
 import json
+import importlib
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
@@ -23,12 +24,17 @@ from sklearn.utils.class_weight import compute_sample_weight
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 try:
-    from numba import jit
+    numba_spec = importlib.util.find_spec("numba")
+    if numba_spec is None:
+        raise ImportError("numba not installed")
+    numba_module = importlib.import_module("numba")
+    jit = numba_module.jit
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
+    jit = None
+    logger.warning("Numba not available. Label generation will use slower Python loops.")
     logger.warning("Numba not available. Label generation will use slower Python loops.")
 
 
@@ -168,7 +174,28 @@ class NNDataPreparer:
                 - data_base_path: Base path for data files (default: 'data')
                 - Other configuration parameters
         """
-        self.config = config
+        if not isinstance(config, dict):
+            raise ValueError("Configuration must be provided as a dictionary")
+
+        required_keys = ['symbols_config_path']
+        missing_keys = [key for key in required_keys if not config.get(key)]
+        if missing_keys:
+            raise ValueError(f"Missing required configuration keys: {missing_keys}")
+
+        symbols_config_path = config['symbols_config_path']
+        if not os.path.exists(symbols_config_path):
+            raise FileNotFoundError(f"symbols_config_path does not exist: {symbols_config_path}")
+
+        # Store a defensive copy so we can safely apply defaults without mutating the caller's config
+        self.config = dict(config)
+
+        feature_list = self.config.get('feature_list')
+        if feature_list is None:
+            logger.warning("Configuration missing 'feature_list'; defaulting to empty list (all available columns will be considered)")
+            self.config['feature_list'] = []
+        elif len(feature_list) == 0:
+            logger.warning("Configuration provided an empty 'feature_list'; all available columns will be considered")
+
         self.raw_data_cache = {}
         self.scalers = {}
         self.asset_id_map = None
@@ -465,21 +492,41 @@ class NNDataPreparer:
             nan_handling = self.config.get('nan_handling_features', 'ffill')
             
             if nan_handling == 'ffill':
-                df_processed = df_with_dow.ffill()
+                df_processed = df_with_dow.ffill().bfill()
             elif nan_handling == 'drop':
                 df_processed = df_with_dow.dropna()
             elif nan_handling == 'bfill':
-                df_processed = df_with_dow.bfill()
+                df_processed = df_with_dow.bfill().ffill()
             elif nan_handling == 'interpolate':
-                df_processed = df_with_dow.interpolate()
+                df_processed = df_with_dow.interpolate().ffill().bfill()
             else:
                 logger.warning(f"Unknown NaN handling method: {nan_handling}, using forward fill")
-                df_processed = df_with_dow.ffill()
+                df_processed = df_with_dow.ffill().bfill()
             
             # Log preprocessing results
             original_rows = len(df)
             processed_rows = len(df_processed)
             nan_count_before = df_selected.isna().sum().sum()
+            remaining_nan_counts = df_processed.isna().sum()
+
+            if remaining_nan_counts.any():
+                problematic = remaining_nan_counts[remaining_nan_counts > 0]
+                for col, count in problematic.items():
+                    non_nan_values = df_processed[col].dropna()
+                    if not non_nan_values.empty:
+                        fill_value = float(non_nan_values.mean())
+                        logger.warning(
+                            f"Column {col} still has {count} NaNs after {nan_handling}; "
+                            f"filling remaining gaps with column mean {fill_value:.6f}"
+                        )
+                    else:
+                        fill_value = 0.0
+                        logger.warning(
+                            f"Column {col} is entirely NaN after {nan_handling}; "
+                            f"filling with {fill_value} to maintain feature continuity"
+                        )
+                    df_processed[col] = df_processed[col].fillna(fill_value)
+
             nan_count_after = df_processed.isna().sum().sum()
             
             logger.info(f"Preprocessed {symbol}: {original_rows} -> {processed_rows} rows, "
@@ -1130,6 +1177,219 @@ class NNDataPreparer:
             
         except Exception as e:
             logger.error(f"Error in get_prepared_data_for_training: {e}")
+            raise
+
+    def get_prepared_data_for_rl_training(self) -> dict:
+        """
+        Prepare data specifically for RL training WITHOUT label generation or filtering.
+        Generates train/val/test splits following Phase 3 structure for proper evaluation.
+        
+        This method is designed for Reinforcement Learning where the agent needs access to
+        the FULL, UNFILTERED dataset. Unlike supervised learning, RL doesn't need pre-computed
+        labels or profit/stop-loss filtering - the agent will discover its own reward patterns.
+        
+        Key differences from get_prepared_data_for_training():
+        1. NO label generation (no profit target / stop loss calculations)
+        2. NO filtering based on labels (preserves 100% of data)
+        3. Returns raw OHLCV + technical indicators + sentiment + temporal features
+        4. Maintains chronological order for time-series integrity
+        5. Generates train/val/test temporal splits (default 70/15/15)
+        6. Compatible with Phase 3 data structure (data/phase3_splits/SYMBOL/)
+        
+        Returns:
+            dict: Dictionary containing prepared data with keys:
+                'symbols_data': Dict[symbol, Dict[split, pd.DataFrame]] - Data per symbol per split
+                'symbols_list': List[str] - List of processed symbols
+                'asset_id_map': Dict[str, int] - Symbol to ID mapping
+                'feature_columns': List[str] - List of feature column names
+                'split_info': Dict - Information about train/val/test splits
+                'date_range': Dict[str, str] - Start and end dates
+        """
+        try:
+            logger.info("="*80)
+            logger.info("Starting data preparation for RL training (NO FILTERING MODE)")
+            logger.info("="*80)
+            
+            # Step 1: Get symbols list from config
+            symbols_list = self.config.get('symbols_list', [])
+            if not symbols_list:
+                # If no symbols_list provided, use all symbols from asset_id_map
+                symbols_list = list(self.asset_id_map.keys())
+                logger.info(f"No symbols_list in config, using all {len(symbols_list)} symbols from asset_id_map")
+            
+            # Get split ratios (default 80/10/10 for RL training - more data for agent)
+            train_ratio = self.config.get('train_ratio', 0.80)
+            val_ratio = self.config.get('val_ratio', 0.10)
+            test_ratio = self.config.get('test_ratio', 0.10)
+            
+            # Validate split ratios
+            total_ratio = train_ratio + val_ratio + test_ratio
+            if not np.isclose(total_ratio, 1.0):
+                logger.warning(f"Split ratios sum to {total_ratio}, normalizing to 1.0")
+                train_ratio /= total_ratio
+                val_ratio /= total_ratio
+                test_ratio /= total_ratio
+            
+            logger.info(f"Preparing RL data for {len(symbols_list)} symbols")
+            logger.info(f"Split ratios: Train={train_ratio:.0%}, Val={val_ratio:.0%}, Test={test_ratio:.0%} (optimized for RL)")
+            
+            # Step 2: Load and preprocess data for each symbol WITHOUT label generation
+            symbols_data = {}
+            split_info = {
+                'train': {'total_rows': 0, 'symbols': []},
+                'val': {'total_rows': 0, 'symbols': []},
+                'test': {'total_rows': 0, 'symbols': []}
+            }
+            feature_columns = None
+            date_range = {'start': None, 'end': None}
+            
+            for symbol in symbols_list:
+                try:
+                    logger.info(f"Processing symbol: {symbol} for RL training")
+                    
+                    # Get asset ID
+                    if symbol not in self.asset_id_map:
+                        logger.warning(f"Symbol {symbol} not found in asset_id_map, skipping")
+                        continue
+                    
+                    # Load and preprocess data (NO label generation)
+                    df_processed = self._preprocess_single_symbol_data(symbol)
+                    
+                    if df_processed.empty:
+                        logger.warning(f"No data available for {symbol} after preprocessing, skipping")
+                        continue
+                    
+                    # Add asset_id column
+                    asset_id = self.asset_id_map[symbol]
+                    df_processed['asset_id'] = asset_id
+                    
+                    # Track feature columns (should be consistent across symbols)
+                    if feature_columns is None:
+                        feature_columns = df_processed.columns.tolist()
+                    
+                    # Track date range
+                    symbol_start = df_processed.index.min()
+                    symbol_end = df_processed.index.max()
+                    if date_range['start'] is None or symbol_start < pd.Timestamp(date_range['start']):
+                        date_range['start'] = str(symbol_start)
+                    if date_range['end'] is None or symbol_end > pd.Timestamp(date_range['end']):
+                        date_range['end'] = str(symbol_end)
+                    
+                    # Generate chronological train/val/test splits
+                    n_rows = len(df_processed)
+                    train_end_idx = int(n_rows * train_ratio)
+                    val_end_idx = int(n_rows * (train_ratio + val_ratio))
+                    
+                    # Split data chronologically (NO SHUFFLING for time-series)
+                    df_train = df_processed.iloc[:train_end_idx].copy()
+                    df_val = df_processed.iloc[train_end_idx:val_end_idx].copy()
+                    df_test = df_processed.iloc[val_end_idx:].copy()
+                    
+                    # Store splits for this symbol
+                    symbols_data[symbol] = {
+                        'train': df_train,
+                        'val': df_val,
+                        'test': df_test,
+                        'full': df_processed  # Keep full data for reference
+                    }
+                    
+                    # Update split info
+                    split_info['train']['total_rows'] += len(df_train)
+                    split_info['train']['symbols'].append(symbol)
+                    split_info['val']['total_rows'] += len(df_val)
+                    split_info['val']['symbols'].append(symbol)
+                    split_info['test']['total_rows'] += len(df_test)
+                    split_info['test']['symbols'].append(symbol)
+                    
+                    logger.info(f"✓ {symbol}: Total {len(df_processed):,} rows → "
+                               f"Train {len(df_train):,} | Val {len(df_val):,} | Test {len(df_test):,}")
+                    logger.info(f"  Date ranges: {symbol_start.date()} to {symbol_end.date()}")
+                    logger.info(f"  Train: {df_train.index.min().date()} to {df_train.index.max().date()}")
+                    logger.info(f"  Val:   {df_val.index.min().date()} to {df_val.index.max().date()}")
+                    logger.info(f"  Test:  {df_test.index.min().date()} to {df_test.index.max().date()}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing symbol {symbol} for RL training: {e}")
+                    continue
+            
+            if not symbols_data:
+                raise ValueError("No data was successfully processed from any symbols for RL training")
+            
+            # Calculate total rows across all splits
+            total_rows = (split_info['train']['total_rows'] + 
+                         split_info['val']['total_rows'] + 
+                         split_info['test']['total_rows'])
+            
+            # Step 3: Prepare final return dictionary
+            final_data = {
+                'symbols_data': symbols_data,
+                'symbols_list': list(symbols_data.keys()),
+                'asset_id_map': self.asset_id_map,
+                'feature_columns': feature_columns,
+                'split_info': split_info,
+                'total_rows': total_rows,
+                'date_range': date_range,
+                'mode': 'RL_TRAINING',
+                'no_filtering': True,
+                'no_labels': True,
+                'split_ratios': {
+                    'train': train_ratio,
+                    'val': val_ratio,
+                    'test': test_ratio
+                }
+            }
+            
+            # Log final summary
+            logger.info("="*80)
+            logger.info("RL data preparation completed successfully!")
+            logger.info("="*80)
+            logger.info(f"Symbols processed: {len(symbols_data)}")
+            logger.info(f"Total timesteps: {total_rows:,} rows (100% preserved, no filtering)")
+            logger.info(f"  Train: {split_info['train']['total_rows']:,} rows ({train_ratio:.1%})")
+            logger.info(f"  Val:   {split_info['val']['total_rows']:,} rows ({val_ratio:.1%})")
+            logger.info(f"  Test:  {split_info['test']['total_rows']:,} rows ({test_ratio:.1%})")
+            logger.info(f"Features per symbol: {len(feature_columns)} columns")
+            logger.info(f"Date range: {date_range['start']} to {date_range['end']}")
+            logger.info(f"Asset ID map: {len(self.asset_id_map)} symbols")
+            
+            # Log per-symbol summary
+            logger.info("\nPer-symbol data summary:")
+            logger.info("-" * 80)
+            for symbol in sorted(symbols_data.keys()):
+                splits = symbols_data[symbol]
+                df_full = splits['full']
+                df_train = splits['train']
+                df_val = splits['val']
+                df_test = splits['test']
+                logger.info(f"  {symbol:8s}: Total {len(df_full):,} rows | "
+                           f"Train {len(df_train):,} | Val {len(df_val):,} | Test {len(df_test):,}")
+                logger.info(f"            asset_id={df_full['asset_id'].iloc[0]:3d} | "
+                           f"dates: {df_full.index.min().date()} to {df_full.index.max().date()}")
+            logger.info("-" * 80)
+            
+            # Verify no NaN values
+            logger.info("\nData quality checks:")
+            for symbol, splits in symbols_data.items():
+                total_nans = 0
+                for split_name in ['train', 'val', 'test']:
+                    df = splits[split_name]
+                    nan_count = df.isna().sum().sum()
+                    total_nans += nan_count
+                
+                if total_nans > 0:
+                    logger.warning(f"  {symbol}: {total_nans} NaN values detected across splits")
+                else:
+                    logger.info(f"  {symbol}: ✓ No NaN values (clean data)")
+            
+            logger.info("="*80)
+            logger.info("IMPORTANT: This data is ready for RL training without any filtering")
+            logger.info("The RL agent will learn directly from the full historical data")
+            logger.info("="*80)
+            
+            return final_data
+            
+        except Exception as e:
+            logger.error(f"Error in get_prepared_data_for_rl_training: {e}")
             raise
 
 

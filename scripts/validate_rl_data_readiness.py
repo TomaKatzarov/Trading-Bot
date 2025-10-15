@@ -103,14 +103,21 @@ def validate_symbol(symbol: str) -> SymbolReport:
         report.notes = [f"Error reading parquet: {exc}"]
         return report
 
-    if "timestamp" not in df.columns:
+    # Handle both DatetimeIndex and timestamp column formats
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        data_start = df["timestamp"].min()
+        data_end = df["timestamp"].max()
+    elif isinstance(df.index, pd.DatetimeIndex):
+        # Use index as timestamp
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        data_start = df.index.min()
+        data_end = df.index.max()
+    else:
         report.status = "error"
-        report.notes = ["Missing timestamp column"]
+        report.notes = ["Missing timestamp column and no DatetimeIndex"]
         return report
-
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-    data_start = df["timestamp"].min()
-    data_end = df["timestamp"].max()
 
     report.data_start = data_start.isoformat()
     report.data_end = data_end.isoformat()

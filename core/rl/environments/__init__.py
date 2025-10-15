@@ -7,6 +7,11 @@ from .reward_shaper import RewardConfig, RewardShaper
 
 try:  # pragma: no cover - optional dependency on gymnasium
     from .trading_env import TradingConfig, TradingEnvironment
+    from .continuous_trading_env import (
+        ContinuousTradingEnvironment,
+        HybridActionEnvironment,
+    )
+    from .action_space_migrator import ActionSpaceMigrator
     from .vec_trading_env import (
         make_multi_symbol_vec_env,
         make_parallel_env,
@@ -36,6 +41,9 @@ if TradingEnvironment is not None and TradingConfig is not None:
     __all__.extend([
         "TradingEnvironment",
         "TradingConfig",
+        "ContinuousTradingEnvironment",
+        "HybridActionEnvironment",
+        "ActionSpaceMigrator",
         "make_vec_trading_env",
         "make_multi_symbol_vec_env",
         "make_parallel_env",

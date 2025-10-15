@@ -103,7 +103,10 @@ class TestPositionTracking:
         manager.open_position("AAPL", 50, 100.0, _ts(), 1)
 
         manager.update_positions({"AAPL": 112.5}, current_step=2)
-        pos = manager.positions["AAPL"]
+        # With multi-position support, get position by symbol
+        aapl_positions = manager.get_positions_for_symbol("AAPL")
+        assert len(aapl_positions) == 1
+        pos = aapl_positions[0]
 
         assert pos.current_price == pytest.approx(112.5)
         assert pos.current_value == pytest.approx(50 * 112.5)
@@ -146,7 +149,10 @@ class TestPositionTracking:
 
         assert success
         assert trade is not None
-        remaining = manager.positions["AAPL"]
+        # With multi-position support, get position by symbol
+        aapl_positions = manager.get_positions_for_symbol("AAPL")
+        assert len(aapl_positions) == 1
+        remaining = aapl_positions[0]
         assert remaining.shares == pytest.approx(60.0)
         assert remaining.cost_basis == pytest.approx(100.0 * 100.0 - trade["cost_basis"])
         assert trade["realized_pnl"] == pytest.approx(40 * 105.0 - trade["commission"] - trade["slippage"] - 40 * 100.0)
@@ -270,7 +276,9 @@ class TestRiskLimits:
         forced_trades = manager.enforce_risk_limits({}, _ts(3), 3)
 
         assert forced_trades == []
-        assert "AAPL" in manager.positions
+        # With multi-position support, check by symbol
+        aapl_positions = manager.get_positions_for_symbol("AAPL")
+        assert len(aapl_positions) == 1
 
 
 class TestCapitalManagement:

@@ -16,6 +16,19 @@ from typing import Iterable, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+try:
+    from numba import jit
+    HAS_NUMBA = True
+except ImportError:
+    HAS_NUMBA = False
+    # Fallback decorator that does nothing
+    def jit(*args, **kwargs):
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["RegimeIndicators"]
@@ -23,6 +36,7 @@ __all__ = ["RegimeIndicators"]
 _NEUTRAL = 0.5
 
 
+@jit(nopython=True, cache=True) if HAS_NUMBA else lambda f: f
 def _percentile_of_last(window: np.ndarray) -> float:
     """Return percentile rank of the last element within a rolling window.
 
@@ -34,36 +48,65 @@ def _percentile_of_last(window: np.ndarray) -> float:
     if window.size == 0:
         return np.nan
 
-    mask = ~np.isnan(window)
-    if not np.any(mask):
+    # Get the last element (most recent value)
+    last_element = window[window.size - 1]
+    
+    # If the last element is NaN, return NaN
+    if np.isnan(last_element):
         return np.nan
 
-    valid = window[mask]
-    last = valid[-1]
-    if np.isnan(last):
+    # Count valid (non-NaN) values and compare with last_element
+    valid_count = 0
+    count_le = 0
+    for i in range(window.size):
+        if not np.isnan(window[i]):
+            valid_count += 1
+            if window[i] <= last_element:
+                count_le += 1
+    
+    if valid_count == 0:
         return np.nan
+    
+    return float(count_le) / float(valid_count)
 
-    count = np.count_nonzero(valid <= last)
-    return float(count) / float(valid.size)
 
-
+@jit(nopython=True, cache=True) if HAS_NUMBA else lambda f: f
 def _trend_strength_stat(window: np.ndarray) -> float:
     """Compute a normalized slope statistic for trend strength analysis."""
 
     if window.size == 0:
         return np.nan
 
-    mask = ~np.isnan(window)
-    if not np.any(mask):
+    # Calculate mean and std for valid values
+    valid_sum = 0.0
+    valid_count = 0
+    last = np.nan
+    
+    for i in range(window.size):
+        if not np.isnan(window[i]):
+            valid_sum += window[i]
+            valid_count += 1
+            last = window[i]
+    
+    if valid_count == 0 or np.isnan(last):
         return np.nan
-
-    valid = window[mask]
-    last = valid[-1]
-    std = float(np.std(valid, ddof=0))
+    
+    mean = valid_sum / valid_count
+    
+    # Calculate standard deviation
+    var_sum = 0.0
+    for i in range(window.size):
+        if not np.isnan(window[i]):
+            diff = window[i] - mean
+            var_sum += diff * diff
+    
+    std = np.sqrt(var_sum / valid_count)
+    
     if std < 1e-8:
-        return float(np.clip(last, -3.0, 3.0))
+        return min(max(last, -3.0), 3.0)
+    
     value = last / (std + 1e-8)
-    return float(np.clip(value, -3.0, 3.0))
+    return min(max(value, -3.0), 3.0)
 
 
 class RegimeIndicators:
@@ -183,11 +226,15 @@ class RegimeIndicators:
         close = self.data["close"].astype(float)
         volume = self.data.get("volume")
 
+        # Use numba engine for rolling operations if available
+        engine = "numba" if HAS_NUMBA else None
+        engine_kwargs = {"nopython": True, "nogil": True, "parallel": False} if HAS_NUMBA else {}
+
         returns = close.pct_change()
         realized_vol = returns.rolling(window=20, min_periods=20).std(ddof=0) * math.sqrt(252.0)
         realized_vol_norm = (realized_vol / self.volatility_scale).clip(0.0, 1.0)
 
-        vol_regime = self._rolling_percentile(realized_vol, window=252, min_periods=60)
+        vol_regime = self._rolling_percentile(realized_vol, window=252, min_periods=60, engine=engine, engine_kwargs=engine_kwargs)
 
         sma_20 = self.data.get("SMA_20")
         if sma_20 is None:
@@ -201,7 +248,9 @@ class RegimeIndicators:
             sma_200 = self.data.get("SMA_20", sma_20)
 
         sma_slope = (sma_20 - sma_20.shift(20)) / (sma_20.shift(20) + 1e-8)
-        trend_strength_raw = sma_slope.rolling(window=60, min_periods=30).apply(_trend_strength_stat, raw=True)
+        trend_strength_raw = sma_slope.rolling(window=60, min_periods=30).apply(
+            _trend_strength_stat, raw=True, engine=engine, engine_kwargs=engine_kwargs
+        )
         trend_strength = (trend_strength_raw / 3.0).clip(-1.0, 1.0)
         trend_strength_unit = (trend_strength * 0.5) + 0.5
 
@@ -225,10 +274,10 @@ class RegimeIndicators:
         if atr_series is None:
             atr_series = self._compute_atr(self.atr_period)
 
-        atr_regime = self._rolling_percentile(atr_series, window=252, min_periods=60)
+        atr_regime = self._rolling_percentile(atr_series, window=252, min_periods=60, engine=engine, engine_kwargs=engine_kwargs)
 
         roc = close.pct_change(20)
-        momentum_regime = self._rolling_percentile(roc, window=60, min_periods=30)
+        momentum_regime = self._rolling_percentile(roc, window=60, min_periods=30, engine=engine, engine_kwargs=engine_kwargs)
 
         vol_change = realized_vol.diff(20)
         vol_trend = np.full_like(vol_change, self.neutral_value, dtype=float)
@@ -276,9 +325,13 @@ class RegimeIndicators:
         series: pd.Series,
         window: int,
         min_periods: int,
+        engine: Optional[str] = None,
+        engine_kwargs: Optional[dict] = None,
     ) -> pd.Series:
+        if engine_kwargs is None:
+            engine_kwargs = {}
         return series.rolling(window=window, min_periods=min_periods).apply(
-            _percentile_of_last, raw=True
+            _percentile_of_last, raw=True, engine=engine, engine_kwargs=engine_kwargs
         ).fillna(self.neutral_value)
 
     def _compute_atr(self, period: int) -> pd.Series:

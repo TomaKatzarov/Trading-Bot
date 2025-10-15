@@ -77,21 +77,26 @@ def test_percentile_of_last_edge_cases() -> None:
     assert pytest.approx(percentile, rel=1e-6) == 1.0
 
 
-def test_percentile_of_last_trailing_nan(monkeypatch: pytest.MonkeyPatch) -> None:
-    original_isnan = regime_module.np.isnan
-
-    def fake_isnan(values: np.ndarray) -> np.ndarray | bool:
-        result = original_isnan(values)
-        if isinstance(result, np.ndarray) and result.size > 0:
-            modified = result.copy()
-            modified.flat[-1] = False
-            return modified
-        return result
-
-    monkeypatch.setattr(regime_module.np, "isnan", fake_isnan)
-
+def test_percentile_of_last_trailing_nan() -> None:
+    """Test that _percentile_of_last returns NaN when the last value is NaN.
+    
+    Note: We test this directly rather than monkeypatching np.isnan, as
+    monkeypatching numpy functions breaks Numba's JIT compilation.
+    """
+    # Test with trailing NaN
     window = np.array([0.1, np.nan])
     assert np.isnan(_percentile_of_last(window))
+    
+    # Test with only NaN values
+    window_all_nan = np.array([np.nan, np.nan, np.nan])
+    assert np.isnan(_percentile_of_last(window_all_nan))
+    
+    # Test with NaN in middle but valid last value
+    window_valid_last = np.array([0.1, np.nan, 0.5])
+    result = _percentile_of_last(window_valid_last)
+    assert not np.isnan(result)
+    # Last value 0.5 is greater than 0.1, so percentile should be 1.0
+    assert result == pytest.approx(1.0)
 
 
 def test_trend_strength_stat_edge_cases() -> None:

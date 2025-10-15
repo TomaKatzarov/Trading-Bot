@@ -943,7 +943,7 @@ logging:
   - MLflow runs recorded under experiment `phase3_10symbol_baseline` (`mlruns/927459213633927191/*`), accessible via `mlflow ui --backend-store-uri file:./mlruns`.
   - Short validation run (`python training/train_phase3_agents.py --config training/config_templates/phase3_ppo_baseline.yaml --symbols AAPL --total-timesteps 256 --n-envs 1 --eval-freq 128 --save-freq 128`) confirmed checkpointing, final model export, and summary logging.
 
-**Status:** Ready for full-scale training
+**Status:** Completed.Ready for full-scale training
 
 **Artifacts Produced:**
 - Baseline configuration: `training/config_templates/phase3_ppo_baseline.yaml`

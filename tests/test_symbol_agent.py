@@ -23,7 +23,7 @@ class TestActionMasker:
         observations = {
             "position": torch.zeros(2, 5),
             "portfolio": torch.tensor(
-                [[10000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
+                [[10000.0, 10000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
             ).repeat(2, 1),
         }
 
@@ -33,6 +33,8 @@ class TestActionMasker:
         assert bool(mask[0, 0])  # HOLD always available
         assert all(bool(mask[0, idx]) for idx in (1, 2, 3))
         assert all(not bool(mask[0, idx]) for idx in (4, 5, 6))
+        # Add position must also be unavailable without an open trade
+        assert not bool(mask[0, 6])
 
     def test_has_position_masks_buys(self) -> None:
         """When already holding a position, buying actions should be masked."""
@@ -40,17 +42,18 @@ class TestActionMasker:
         masker = ActionMasker()
         observations = {
             "position": torch.tensor(
-                [[100.0, 10.0, 50.0, 5.0, 1.0]], dtype=torch.float32
+                [[1.0, 10.0, 0.05, 5.0, 0.4]], dtype=torch.float32
             ).repeat(2, 1),
             "portfolio": torch.tensor(
-                [[10000.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
+                [[10000.0, 6000.0, 0.4, 1.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
             ).repeat(2, 1),
         }
 
         mask = masker.get_mask(observations)
 
         assert all(not bool(mask[0, idx]) for idx in (1, 2, 3))
-        assert all(bool(mask[0, idx]) for idx in (4, 5, 6))
+        assert all(bool(mask[0, idx]) for idx in (4, 5))
+        assert bool(mask[0, 6])
 
     def test_high_exposure_masks_increases(self) -> None:
         """High portfolio exposure should disable position-increasing actions."""
@@ -59,7 +62,7 @@ class TestActionMasker:
         observations = {
             "position": torch.zeros(1, 5),
             "portfolio": torch.tensor(
-                [[10000.0, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
+                [[10000.0, 1000.0, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
             ),
         }
 
@@ -146,7 +149,7 @@ class TestSymbolAgent:
             "sl_probs": torch.rand(batch, 3),
             "position": torch.zeros(batch, 5),
             "portfolio": torch.tensor(
-                [[10000.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
+                [[10000.0, 7000.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=torch.float32
             ).repeat(batch, 1),
             "regime": torch.randn(batch, 10),
         }

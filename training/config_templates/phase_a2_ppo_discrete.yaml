@@ -1,0 +1,18 @@
+experiment:
+  name: "phase_a2_ppo_discrete"
+
+environment:
+  symbol: "TEST1"
+  data_path: "data/demo/TEST1.parquet"
+  action_mode: "discrete"
+  episode_length: 512
+  lookback_window: 24
+  continuous_settings:
+    hold_threshold: 0.05
+    max_position_pct: 0.12
+    smoothing_window: 5
+    transaction_cost: 0.002
+    min_trade_value: 50.0
+
+ppo:
+  dummy: true

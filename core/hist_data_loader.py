@@ -460,9 +460,20 @@ class HistoricalDataLoader:
             if os.path.exists(filename):
                 try:
                     existing_df = pd.read_parquet(filename)
-                    # Ensure index is DatetimeIndex
-                    if not isinstance(existing_df.index, pd.DatetimeIndex):
-                        existing_df.index = pd.to_datetime(existing_df.index)
+                    
+                    # Handle both DatetimeIndex and timestamp column formats
+                    if 'timestamp' in existing_df.columns and not isinstance(existing_df.index, pd.DatetimeIndex):
+                        # Has timestamp column but not as index - convert to DatetimeIndex
+                        existing_df['timestamp'] = pd.to_datetime(existing_df['timestamp'], utc=True)
+                        existing_df = existing_df.set_index('timestamp')
+                    elif not isinstance(existing_df.index, pd.DatetimeIndex):
+                        # Try to convert index to DatetimeIndex
+                        existing_df.index = pd.to_datetime(existing_df.index, utc=True)
+                    else:
+                        # Already has DatetimeIndex, ensure timezone-aware
+                        if existing_df.index.tz is None:
+                            existing_df.index = existing_df.index.tz_localize('UTC')
+                    
                     # Ensure existing data also has the desired columns
                     existing_cols_to_use = [col for col in desired_columns if col in existing_df.columns]
                     existing_df = existing_df[existing_cols_to_use]
@@ -474,6 +485,7 @@ class HistoricalDataLoader:
                     combined_df.sort_index(inplace=True)
                 except Exception as read_err:
                      logger.error(f"Error reading existing file {filename}, overwriting: {read_err}")
+                     logger.exception(read_err)  # Log full traceback for debugging
                      combined_df = save_df.sort_index()  # Use only new data if read fails
             else:
                 combined_df = save_df.sort_index()

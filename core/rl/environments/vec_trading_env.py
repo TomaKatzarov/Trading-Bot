@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
 
+from .action_space_migrator import ActionSpaceMigrator
+from .continuous_trading_env import ContinuousTradingEnvironment, HybridActionEnvironment
 from .trading_env import TradingConfig, TradingEnvironment
 
 logger = logging.getLogger(__name__)
@@ -58,9 +60,25 @@ def _build_config(
     """Materialize a :class:`TradingConfig` from provided arguments."""
 
     kwargs: Dict[str, Any] = dict(base_kwargs or {})
+    continuous_settings = kwargs.pop("continuous_settings", None)
+    action_mode = kwargs.pop("action_mode", None)
     kwargs.setdefault("symbol", symbol)
     kwargs.setdefault("data_path", data_path)
     kwargs.setdefault("sl_checkpoints", _normalize_sl_checkpoints(sl_checkpoints))
+
+    # DEBUG: Log curriculum parameters
+    curriculum_enabled = kwargs.get("exploration_curriculum_enabled", False)
+    logger.info(
+        f"[_build_config] Symbol={symbol}, Curriculum Enabled={curriculum_enabled}, "
+        f"All kwargs keys: {list(kwargs.keys())}"
+    )
+    if curriculum_enabled:
+        logger.info(
+            f"[_build_config] Curriculum params: "
+            f"phase1_end={kwargs.get('exploration_phase1_end_step')}, "
+            f"phase1_min_pct={kwargs.get('exploration_phase1_min_action_pct')}, "
+            f"phase1_penalty={kwargs.get('exploration_phase1_penalty')}"
+        )
 
     # Prevent duplicates that would raise ``TypeError`` when instantiating the dataclass.
     for required_key in ("symbol", "data_path", "sl_checkpoints"):
@@ -73,7 +91,23 @@ def _build_config(
         elif required_key == "data_path":
             kwargs[required_key] = data_path
 
-    return TradingConfig(**kwargs)
+    config = TradingConfig(**kwargs)
+    if continuous_settings is not None:
+        setattr(config, "continuous_settings", continuous_settings)
+    if action_mode is not None:
+        setattr(config, "action_mode", str(action_mode))
+    return config
+
+
+def _create_environment(config: TradingConfig, *, seed: int, mode: Optional[str]) -> TradingEnvironment:
+    """Instantiate an environment compatible with the requested action mode."""
+
+    normalized = (mode or getattr(config, "action_mode", "discrete") or "discrete").lower()
+    if normalized == "continuous":
+        return ContinuousTradingEnvironment(config, seed)
+    if normalized == "hybrid":
+        return HybridActionEnvironment(config, seed)
+    return TradingEnvironment(config, seed)
 
 
 def _make_env_factory(
@@ -104,8 +138,16 @@ def _make_env_factory(
         )
 
         env_seed = seed + rank
-        env = TradingEnvironment(config, seed=env_seed)
-        logger.debug("Created TradingEnvironment(rank=%s, seed=%s) for %s", rank, env_seed, symbol)
+        mode = getattr(config, "action_mode", None)
+        env = _create_environment(config, seed=env_seed, mode=mode)
+        logger.debug(
+            "Created %s environment (mode=%s, rank=%s, seed=%s) for %s",
+            env.__class__.__name__,
+            mode or "discrete",
+            rank,
+            env_seed,
+            symbol,
+        )
         return env
 
     return _init

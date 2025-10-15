@@ -1,0 +1,76 @@
+experiment:
+  name: "phase_a2_sac"
+  output_dir: "models/phase_a2_sac"
+
+training:
+  total_timesteps: 100000
+  seed: 2025
+  log_freq: 250
+  entropy_window: 512
+  metrics_log_freq: 1000
+  eval_freq: 5000
+  n_eval_episodes: 5
+  save_best_model: true
+  save_interval: 10000
+  save_final_model: true
+  n_envs: 16
+evaluation:
+  episodes: 10
+  continuous_temperature: 2.0
+  stochastic_continuous: true
+
+environment:
+  symbol: "SPY"
+  data_path: "data/historical/SPY/1Hour/data.parquet"
+  action_mode: "continuous"
+  episode_length: 512
+  lookback_window: 24
+  vec_env_type: "subproc"
+  continuous_settings:
+    hold_threshold: 0.04
+    max_position_pct: 0.08
+    smoothing_window: 5
+    transaction_cost: 0.0015
+    min_trade_value: 50.0
+
+sac:
+  base_learning_rate: 0.0003
+  warmup_fraction: 0.12
+  buffer_size: 200000
+  learning_starts: 1000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 2
+  gradient_steps: 1
+  auto_scale_gradient_steps: false
+  ent_coef: "auto"
+  target_update_interval: 1
+  target_entropy: "auto"
+  use_sde: true
+  sde_sample_freq: 64
+  action_noise_sigma: 0.3
+  action_noise_theta: 0.2
+  action_noise_dt: 0.02
+  policy_kwargs:
+    net_arch:
+      - 24
+    log_std_init: -0.8
+  compile_policy: false
+
+# Intrinsic Curiosity Module
+icm:
+  enabled: true
+  eta: 0.01             # Intrinsic reward scaling
+  beta: 0.2             # Forward/inverse loss balance
+  hidden_dim: 256
+  feature_dim: 128
+
+  # Reward combination
+  extrinsic_weight: 0.9 # Weight for environment rewards
+  intrinsic_weight: 0.1 # Weight for curiosity rewards
+
+  # Training
+  icm_lr: 0.0001        # Learning rate for ICM
+  train_freq: 1         # Train ICM every step
+  warmup_steps: 1000    # Steps before ICM training starts

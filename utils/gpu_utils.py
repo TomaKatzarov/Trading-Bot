@@ -32,8 +32,8 @@ def setup_gpu(memory_fraction: float = 0.95,
     # Set environment variables for transformers to use GPU
     os.environ["TOKENIZERS_PARALLELISM"] = "true"
     
-    # Set optimal memory allocation for CUDA 12.x
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = f"max_split_size_mb:128"
+    # Set optimal memory allocation for CUDA 12.x (use new API name)
+    os.environ["PYTORCH_ALLOC_CONF"] = "max_split_size_mb:128"
     
     # Enable optimization flags
     if enable_optimization:
@@ -42,11 +42,24 @@ def setup_gpu(memory_fraction: float = 0.95,
         major_version = capability[0]
         
         # Support for newer architectures (Ampere, Ada Lovelace, Blackwell)
-        # RTX 5070 Ti has reported capability 12cd triton.0
+        # RTX 5070 Ti has reported capability 12.0
         if major_version >= 8:
             logger.info(f"Enabling TF32 precision for GPU with compute capability {major_version}.{capability[1]}")
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
+            # Use new PyTorch 2.9+ API to avoid deprecation warnings
+            try:
+                if hasattr(torch.backends.cuda.matmul, "fp32_precision"):
+                    torch.backends.cuda.matmul.fp32_precision = "tf32"
+                else:
+                    torch.backends.cuda.matmul.allow_tf32 = True
+            except (AttributeError, RuntimeError):
+                pass
+            try:
+                if hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+                    torch.backends.cudnn.conv.fp32_precision = "tf32"
+                else:
+                    torch.backends.cudnn.allow_tf32 = True
+            except (AttributeError, RuntimeError):
+                pass
         
         # Enable CUDA graph capture for repeated operations
         if hasattr(torch, '__version__'):
@@ -170,15 +183,23 @@ def check_xformers_compatibility() -> Dict[str, Any]:
     }
     
     try:
-        import xformers
+        import warnings
+        # Suppress warnings during xformers import check
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import xformers
+            
         status["installed"] = True
         status["version"] = getattr(xformers, "__version__", "unknown")
         
         # Check if xFormers CUDA extensions are working
         try:
-            from xformers.ops import memory_efficient_attention
-            dummy_input = torch.rand(1, 8, 16, 16).to("cuda")
-            memory_efficient_attention(dummy_input, dummy_input, dummy_input)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                from xformers.ops import memory_efficient_attention
+                dummy_input = torch.rand(1, 8, 16, 16).to("cuda")
+                memory_efficient_attention(dummy_input, dummy_input, dummy_input)
+                
             status["compatible"] = True
             logger.info(f"✅ xFormers {status['version']} is working correctly with PyTorch {status['pytorch_version']}")
         except (ImportError, RuntimeError, AttributeError) as e:

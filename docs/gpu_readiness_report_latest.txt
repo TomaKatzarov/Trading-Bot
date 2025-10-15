@@ -1,5 +1,0 @@
-GPU Matrix Mult (10x 5000x5000): 0.132s
-NN Forward Pass (100x batches of 256): 0.037s
-Peak GPU Memory Used: 0.29 GB
-Total GPU Memory: 15.92 GB
-GPU Ready for RL Training

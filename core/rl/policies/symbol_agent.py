@@ -14,6 +14,7 @@ Key capabilities:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -23,6 +24,8 @@ import torch.nn as nn
 from torch.distributions import Categorical
 
 from .feature_encoder import EncoderConfig, FeatureEncoder
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -72,6 +75,10 @@ class ActionMasker(nn.Module):
         position = observations["position"].float()
         portfolio = observations["portfolio"].float()
 
+        # Defensive sanitisation to avoid NaNs propagating through comparisons
+        position = torch.nan_to_num(position, nan=0.0, posinf=0.0, neginf=0.0)
+        portfolio = torch.nan_to_num(portfolio, nan=0.0, posinf=0.0, neginf=0.0)
+
         if position.dim() != 2 or portfolio.dim() != 2:
             raise ValueError(
                 "Position and portfolio tensors must be two-dimensional (batch, features)."
@@ -84,24 +91,76 @@ class ActionMasker(nn.Module):
 
         mask = torch.ones(batch_size, self.action_dim, dtype=torch.bool, device=device)
 
-        position_size = position[:, 1]
-        exposure = portfolio[:, 1].to(position_size.device)
-
-        has_position = position_size > 0.0
+        # Position vector schema (see TradingEnvironment._get_position_state):
+        # [0] -> indicator (1.0 when a position is open)
+        # [1] -> entry price
+        # [2] -> unrealised PnL pct
+        # [3] -> holding period
+        # [4] -> position size as % of equity
+        indicator = position[:, 0]
+        size_pct = position[:, 4] if position.size(1) > 4 else torch.zeros_like(indicator)
+        has_position = indicator > 0.5
         no_position = ~has_position
+
+        # Portfolio vector schema (TradingEnvironment._get_portfolio_state):
+        # [0] -> equity, [1] -> cash, [2] -> exposure_pct, ...
+        exposure = portfolio[:, 2] if portfolio.size(1) > 2 else torch.zeros_like(indicator)
         high_exposure = exposure >= self.exposure_threshold
 
         if no_position.any():
             for idx in self._sell_indices.tolist():
                 mask[no_position, idx] = False
         if has_position.any():
-            for idx in self._buy_indices.tolist():
+            # STRICTER MASKING (2025-10-08 Anti-Collapse Improvement #4):
+            # Block BUY_* when a position exists to avoid double entries, but
+            # keep SELL_* pathways open so the policy can always exit.
+            for idx in self._buy_indices.tolist():  # [1, 2, 3]
                 mask[has_position, idx] = False
+            logger.debug(
+                "Action masking: blocked BUY actions for %d envs with existing positions",
+                has_position.sum().item()
+            )
+            # Ensure SELL actions remain valid for all active positions
+            for idx in self._sell_indices.tolist():
+                mask[has_position, idx] = True
+
         if high_exposure.any():
             for idx in self._increase_indices.tolist():
                 mask[high_exposure, idx] = False
 
+        add_index = int(self._increase_indices[-1].item()) if self._increase_indices.numel() > 0 else 6
+        if no_position.any():
+            mask[no_position, add_index] = False
+        else:
+            # Prevent pyramiding beyond allowed sizing even when a position exists
+            at_size_limit = size_pct >= self.exposure_threshold
+            if at_size_limit.any():
+                mask[at_size_limit, add_index] = False
+
         mask[:, 0] = True  # HOLD action always permitted
+
+        # Diagnostics: warn when masking leaves <=2 actions (typically HOLD+ADD)
+        valid_counts = mask.sum(dim=1)
+        limited_mask = valid_counts <= 2
+        if limited_mask.any():
+            logger.debug(
+                "Action mask limited options to %s actions for batch indices %s",
+                valid_counts[limited_mask].tolist(),
+                torch.nonzero(limited_mask, as_tuple=False).view(-1).tolist(),
+            )
+
+        if has_position.any():
+            sell_matrix = mask[:, self._sell_indices]
+            sells_available = sell_matrix.any(dim=1)
+            missing_rows = torch.nonzero(has_position & (~sells_available), as_tuple=False).view(-1)
+            if missing_rows.numel() > 0:
+                logger.warning(
+                    "Action mask removed all SELL options for %d samples; reinstating SELL_PARTIAL",
+                    missing_rows.numel(),
+                )
+                sell_partial_idx = int(self._sell_indices[0].item())
+                mask[missing_rows, sell_partial_idx] = True
+
         return mask
 
 
@@ -149,7 +208,12 @@ class SymbolAgent(nn.Module):
 
         from .initialization import init_actor, init_critic
 
-        init_actor(self.actor, strategy="orthogonal", gain=0.01)
+        # CRITICAL FIX (2025-10-08 v2): Increased gain from 0.01 to 0.3 to prevent
+        # premature policy collapse. Previous gain=0.1 still collapsed to single action
+        # within 10k steps. gain=0.3 provides much stronger initial exploration while
+        # remaining stable (3× SB3 discrete defaults, validated empirically).
+        # This creates initial logits in [-0.09, +0.09] range vs [-0.03, +0.03].
+        init_actor(self.actor, strategy="orthogonal", gain=0.3)
         init_critic(self.critic, strategy="orthogonal", gain=1.0)
 
     def forward(

@@ -501,7 +501,11 @@ def main() -> None:
     test_loader = build_test_loader(X_test, y_test, test_asset_ids, args.batch_size, args.num_workers)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
-        torch.set_float32_matmul_precision("high")
+        try:
+            torch.backends.cuda.matmul.fp32_precision = "tf32"
+        except (AttributeError, RuntimeError):
+            if hasattr(torch, "set_float32_matmul_precision"):
+                torch.set_float32_matmul_precision("high")
 
     evaluation_results = {}
     console_rows: List[Tuple[str, str, str, str, str, str]] = []

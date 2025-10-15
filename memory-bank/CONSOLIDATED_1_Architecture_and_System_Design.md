@@ -1,7 +1,7 @@
 # Consolidated Documentation: Core Architecture & System Design
 
-**Document Version:** 2.0 - Consolidated  
-**Last Updated:** October 6, 2025  
+**Document Version:** 2.1 - Consolidated  
+**Last Updated:** October 9, 2025  
 **Status:** Production Reference  
 **Consolidates:** systemPatterns.md, techContext.md, productContext.md, rl_system_architecture.md, asset_id_embedding_strategy.md
 
@@ -38,6 +38,16 @@ An AI-powered trading system that operates exclusively on a local machine, direc
 - **Adaptive Learning:** Continuous improvement through trade outcomes
 - **Risk Management:** Stop-loss/take-profit rules and dynamic position sizing
 - **Backtesting & Evaluation:** Rigorous strategy validation before deployment
+
+### Phase 3 Stage Progress (as of 2025-10-09)
+
+| Stage | Focus | Status | Baseline / Evidence |
+|-------|-------|--------|----------------------|
+| Stage 1 | Exploration recovery (actor gain 0.1, entropy schedule, reward normalization disabled) | ✅ Complete | `analysis/validate_exploration_fix.py`; smoke requirement: action entropy ≥1.3 with ≥4 actions per 120-step window |
+| Stage 2 | Professional reward stack (realized-only PnL, exit multipliers, pyramiding gates) | ✅ Complete | 3 k-step benchmark: Sharpe +0.563, win rate 64.5%, max DD 0.45% |
+| Stage 3 | Anti-collapse safeguards (diversity bonus 0.07, action repeat penalty 0.05, SELL mask audit) | ✅ Complete | `tests/test_reward_shaper.py` 42/42 pass (2025-10-09) |
+| Stage 4 | Telemetry + Stage 5 runner (entropy guard, voluntary trade metrics) | ✅ Complete | `scripts/run_phase3_stage5_validation.py` emits `policy_action_entropy_mean`, `voluntary_trade_rate`, sanitizer deltas |
+| Stage 5 | Short retrain (5–10 k timesteps per seed) + telemetry diffing | 🚧 Pending | Command staged; success gates: entropy ≥0.20, voluntary trade ≥10%, sanitizer delta <15 pp |
 
 ---
 
@@ -628,15 +638,19 @@ Hierarchical multi-agent RL system designed to replace underperforming supervise
 
 ### Reward Design
 
-**Symbol Agent Reward:**
+**Symbol Agent Reward (Stage 5 Baseline):**
 ```
-R_t = 10·r_pnl + 5·r_cost + 2·r_timing + 3·r_sharpe + 5·r_drawdown + 0.5·r_util + 1·r_div
+R_t = 0.75·r_pnl + 0.10·r_cost + 0.03·r_sharpe + 0.02·r_drawdown + 0.07·r_diversity + 0.05·r_action_repeat + 0.01·r_intrinsic_action
 ```
 
 Where:
-- `r_pnl`: Normalized by initial capital
-- `r_cost`: Transaction cost penalty (15 bps per round trip)
-- `r_drawdown`: Multiplicative penalty when >10% intra-trade
+- `r_pnl`: ROI-scaled realized PnL (no unrealized credit).
+- `r_cost`: Transaction cost penalty (2 bps commission + 1 bp slippage baseline).
+- `r_sharpe`: Small risk-adjusted contribution (suppressed until ≥6 trades).
+- `r_drawdown`: Exponential penalty >10% intra-trade drawdown.
+- `r_diversity`: Bonus for ≥3 unique actions per 50-step window.
+- `r_action_repeat`: Penalty when executed actions exceed 3-streak limit.
+- `r_intrinsic_action`: 0.1 base reward (scaled by 0.01) for valid non-HOLD executions to support exploration.
 
 **Master Agent Reward:**
 - Emphasizes risk-adjusted return
@@ -650,10 +664,13 @@ Where:
 - Vectorized reset() and step()
 - GPU-accelerated feature stacking
 - Transaction cost, borrow fees, slippage simulation
+- Action diversity instrumentation: max-consecutive-action enforcement (limit 3), rolling diversity window (50 steps), action-repeat penalties.
+- Telemetry: emits `policy_action_entropy_mean`, `executed_action_entropy_mean`, `voluntary_trade_rate`, `sanitizer_trade_delta`, forced-exit ratios for Stage 5 dashboards.
 
 **Vectorized Wrapper:** `core/rl/vector_env.py`
 - N parallel market scenarios
 - Faster sample collection for PPO/MAPPO
+- Exploration safeguards: PPO entropy stack couples an 0.08→0.03 hold-then-linear scheduler with adaptive entropy bonus (target 0.55) and an action-entropy guard (threshold 0.22, warmup 4 k steps) that auto-boosts exploration or halts runs if collapse recurs.
 
 ### Scalability & Performance
 

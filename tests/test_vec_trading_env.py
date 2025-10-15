@@ -45,18 +45,18 @@ def _write_dataset(path: Path, symbol: str, rows: int = 512) -> None:
     df["vwap"] = base_close
     df["SMA_10"] = df["close"].rolling(10, min_periods=1).mean()
     df["SMA_20"] = df["close"].rolling(20, min_periods=1).mean()
-    df["MACD"] = rng.normal(0.0, 0.2, size=rows)
+    df["MACD_line"] = rng.normal(0.0, 0.2, size=rows)  # Fixed: was "MACD"
     df["MACD_signal"] = rng.normal(0.0, 0.1, size=rows)
     df["MACD_hist"] = rng.normal(0.0, 0.05, size=rows)
     df["RSI_14"] = rng.uniform(30, 70, size=rows)
-    df["Stochastic_K"] = rng.uniform(20, 80, size=rows)
-    df["Stochastic_D"] = rng.uniform(20, 80, size=rows)
+    df["Stoch_K"] = rng.uniform(20, 80, size=rows)  # Fixed: was "Stochastic_K"
+    df["Stoch_D"] = rng.uniform(20, 80, size=rows)  # Fixed: was "Stochastic_D"
     df["ADX_14"] = rng.uniform(10, 40, size=rows)
     df["ATR_14"] = rng.uniform(0.5, 2.0, size=rows)
     df["BB_bandwidth"] = rng.uniform(0.01, 0.06, size=rows)
     df["OBV"] = np.cumsum(rng.integers(-5_000, 5_000, size=rows))
     df["Volume_SMA_20"] = rng.integers(5_000, 50_000, size=rows)
-    df["Return_1h"] = df["close"].pct_change().fillna(0.0)
+    df["1h_return"] = df["close"].pct_change().fillna(0.0)  # Fixed: was "Return_1h"
     df["sentiment_score_hourly_ffill"] = rng.uniform(0.4, 0.6, size=rows)
 
     day_angle = 2 * math.pi * np.arange(rows) / 24.0

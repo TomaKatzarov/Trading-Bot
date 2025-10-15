@@ -114,18 +114,20 @@ class SentimentAttacher:
             
             df = pd.read_parquet(data_path)
             
-            # Ensure timestamp column is datetime and timezone-aware
+            # Handle both DatetimeIndex and timestamp column formats
             if 'timestamp' in df.columns:
+                # Already has timestamp column, ensure it's timezone-aware
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
                 if df['timestamp'].dt.tz is None:
                     df['timestamp'] = df['timestamp'].dt.tz_localize('UTC')
-            elif df.index.name == 'timestamp' or isinstance(df.index, pd.DatetimeIndex):
+                # Set timestamp as index for consistent processing
+                df = df.set_index('timestamp')
+            elif isinstance(df.index, pd.DatetimeIndex):
+                # Already has DatetimeIndex, just ensure timezone-aware
                 if df.index.tz is None:
                     df.index = df.index.tz_localize('UTC')
-                df = df.reset_index()
-                df.rename(columns={'index': 'timestamp'}, inplace=True)
             else:
-                logger.error(f"No timestamp column found in historical data for {symbol}")
+                logger.error(f"No timestamp column or DatetimeIndex found in historical data for {symbol}")
                 return None
             
             logger.debug(f"Loaded {len(df)} hourly records for {symbol}")
@@ -184,23 +186,19 @@ class SentimentAttacher:
             # Prepare sentiment data for merging
             sent_df = sentiment_df.copy()
             
-            # Ensure both timestamp columns are datetime with consistent timezone
-            hist_df['timestamp'] = pd.to_datetime(hist_df['timestamp'])
-            sent_df['date'] = pd.to_datetime(sent_df['date'])
+            # Handle DatetimeIndex - convert to column for merge_asof
+            if isinstance(hist_df.index, pd.DatetimeIndex):
+                hist_df = hist_df.reset_index()
+                if 'index' in hist_df.columns:
+                    hist_df = hist_df.rename(columns={'index': 'timestamp'})
             
-            # Convert both to UTC for consistent merging
-            if hist_df['timestamp'].dt.tz is None:
-                hist_df['timestamp'] = hist_df['timestamp'].dt.tz_localize('UTC')
-            else:
-                hist_df['timestamp'] = hist_df['timestamp'].dt.tz_convert('UTC')
-            
-            if sent_df['date'].dt.tz is None:
-                sent_df['date'] = sent_df['date'].dt.tz_localize('UTC')
-            else:
-                sent_df['date'] = sent_df['date'].dt.tz_convert('UTC')
+            # Ensure both timestamp columns are datetime with consistent timezone and precision
+            # Convert to datetime64[ns, UTC] for consistent merge (pandas default)
+            hist_df['timestamp'] = pd.to_datetime(hist_df['timestamp'], utc=True).astype('datetime64[ns, UTC]')
+            sent_df['date'] = pd.to_datetime(sent_df['date'], utc=True).astype('datetime64[ns, UTC]')
             
             # Sort both dataframes by timestamp/date
-            hist_df = hist_df.sort_values('timestamp').reset_index(drop=True)
+            hist_df = hist_df.sort_values('timestamp')
             sent_df = sent_df.sort_values('date').reset_index(drop=True)
             
             # Use merge_asof for forward-fill behavior
@@ -214,16 +212,28 @@ class SentimentAttacher:
                 suffixes=('', '_sentiment')
             )
             
-            # Rename the sentiment column to our target name
-            merged_df = merged_df.rename(columns={'sentiment_score': self.sentiment_column_name})
+            # Handle sentiment column naming
+            # If sentiment already existed, merge_asof created sentiment_score_sentiment or similar
+            # Drop the old sentiment column and use the new one
+            if self.sentiment_column_name in merged_df.columns:
+                # Drop existing sentiment column (old data)
+                merged_df = merged_df.drop(columns=[self.sentiment_column_name])
+            
+            # Rename the newly merged sentiment_score to our target name
+            if 'sentiment_score' in merged_df.columns:
+                merged_df = merged_df.rename(columns={'sentiment_score': self.sentiment_column_name})
             
             # Drop the temporary date column from sentiment data
             merged_df = merged_df.drop(columns=['date'], errors='ignore')
             
+            # Check if sentiment column exists after merge
+            if self.sentiment_column_name not in merged_df.columns:
+                raise ValueError(f"Sentiment column '{self.sentiment_column_name}' not found after merge. Available columns: {list(merged_df.columns)}")
+            
             # Check for any missing sentiment values
-            missing_sentiment = merged_df[self.sentiment_column_name].isna().sum()
-            if missing_sentiment > 0:
-                logger.warning(f"Found {missing_sentiment} records with missing sentiment scores")
+            missing_count = int(merged_df[self.sentiment_column_name].isna().sum())
+            if missing_count > 0:
+                logger.warning(f"Found {missing_count} records with missing sentiment scores")
                 
                 # Forward-fill any remaining NaN values
                 merged_df[self.sentiment_column_name] = merged_df[self.sentiment_column_name].ffill()
@@ -231,10 +241,16 @@ class SentimentAttacher:
                 # If still NaN at the beginning, backward-fill
                 merged_df[self.sentiment_column_name] = merged_df[self.sentiment_column_name].bfill()
             
+            # Restore DatetimeIndex format (consistent with rest of pipeline)
+            if 'timestamp' in merged_df.columns:
+                merged_df = merged_df.set_index('timestamp')
+            
             return merged_df
             
         except Exception as e:
+            import traceback
             logger.error(f"Error in forward_fill_sentiment: {e}")
+            logger.error(traceback.format_exc())
             raise
     
     def verify_sentiment_attachment(self, df: pd.DataFrame, symbol: str) -> Dict[str, any]:
@@ -279,7 +295,15 @@ class SentimentAttacher:
                 
                 # Check weekend/holiday forward-filling
                 df_with_weekday = df.copy()
-                df_with_weekday['weekday'] = df_with_weekday['timestamp'].dt.weekday
+                # Use index for weekday calculation (DatetimeIndex)
+                if isinstance(df_with_weekday.index, pd.DatetimeIndex):
+                    df_with_weekday['weekday'] = df_with_weekday.index.weekday
+                elif 'timestamp' in df_with_weekday.columns:
+                    df_with_weekday['weekday'] = df_with_weekday['timestamp'].dt.weekday
+                else:
+                    # Skip weekday check if no timestamp info
+                    logger.warning(f"Cannot perform weekday check for {symbol}: no timestamp info")
+                    return verification
                 
                 # Check if weekend records (Saturday=5, Sunday=6) have sentiment
                 weekend_records = df_with_weekday[df_with_weekday['weekday'].isin([5, 6])]
@@ -307,8 +331,8 @@ class SentimentAttacher:
             # Ensure the directory exists
             data_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Save the updated data
-            df.to_parquet(data_path, index=False)
+            # Save the updated data with DatetimeIndex (index=True to preserve index structure)
+            df.to_parquet(data_path, index=True)
             
             logger.info(f"Successfully updated historical data for {symbol} with sentiment scores")
             return True

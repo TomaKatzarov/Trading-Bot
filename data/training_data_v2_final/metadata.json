@@ -1,5 +1,5 @@
 {
-  "generation_timestamp": "2025-10-05T14:57:06.058558",
+  "generation_timestamp": "2025-10-11T20:34:49.523406",
   "num_symbols": 160,
   "symbols_processed": [
     "AAPL",
@@ -168,11 +168,11 @@
   "prediction_horizon_hours": 24,
   "profit_target": 0.015,
   "stop_loss": 0.03,
-  "total_sequences": 1881363,
-  "train_samples": 1316954,
-  "val_samples": 282204,
-  "test_samples": 282205,
-  "positive_ratio_train": 0.2415217236137329,
-  "positive_ratio_val": 0.2686921517767289,
-  "positive_ratio_test": 0.22594922131074927
+  "total_sequences": 2795680,
+  "train_samples": 1956975,
+  "val_samples": 419353,
+  "test_samples": 419352,
+  "positive_ratio_train": 0.19372858621086114,
+  "positive_ratio_val": 0.21843411159572007,
+  "positive_ratio_test": 0.1250524618935882
 }

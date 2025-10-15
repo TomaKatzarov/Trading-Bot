@@ -17,6 +17,7 @@ from core.rl.environments.trading_env import (
     TradingEnvironment,
 )
 from core.rl.environments.portfolio_manager import PortfolioConfig, Position
+from core.rl.environments.reward_shaper import RewardConfig
 
 
 @pytest.fixture
@@ -40,18 +41,18 @@ def make_parquet(tmp_path: Path):
         df["vwap"] = df["close"]
         df["SMA_10"] = df["close"].rolling(10, min_periods=1).mean()
         df["SMA_20"] = df["close"].rolling(20, min_periods=1).mean()
-        df["MACD"] = 0.0
+        df["MACD_line"] = 0.0  # Fixed: was "MACD"
         df["MACD_signal"] = 0.0
         df["MACD_hist"] = 0.0
         df["RSI_14"] = 55.0
-        df["Stochastic_K"] = 60.0
-        df["Stochastic_D"] = 58.0
+        df["Stoch_K"] = 60.0  # Fixed: was "Stochastic_K"
+        df["Stoch_D"] = 58.0  # Fixed: was "Stochastic_D"
         df["ADX_14"] = 22.0
         df["ATR_14"] = 0.5
         df["BB_bandwidth"] = 0.04
         df["OBV"] = np.cumsum(np.where(np.diff(np.r_[df["close"].iloc[0], df["close"]]) >= 0, 1, -1) * 10_000)
         df["Volume_SMA_20"] = 1_000_000
-        df["Return_1h"] = df["close"].pct_change().fillna(0.0)
+        df["1h_return"] = df["close"].pct_change().fillna(0.0)  # Fixed: was "Return_1h"
         df["sentiment_score_hourly_ffill"] = 0.55
 
         day_angle = 2 * math.pi * timestamps.dayofweek / 7
@@ -122,13 +123,17 @@ def test_buy_and_sell_cycle_updates_portfolio(make_parquet):
 
     _, reward, terminated, truncated, info = env.step(TradeAction.BUY_MEDIUM.value)
     assert info["action_executed"] is True
-    assert env.portfolio.positions.get("TEST") is not None
+    # Check that a position exists for TEST symbol (multi-position uses position_id as key)
+    test_positions = [p for p in env.portfolio.positions.values() if p.symbol == "TEST"]
+    assert len(test_positions) == 1
     assert not terminated and not truncated
 
     _, reward, terminated, truncated, info = env.step(TradeAction.SELL_ALL.value)
     assert info["position_closed"] is not None
     assert info["position_closed"].get("trigger") == "agent_full_close"
-    assert env.portfolio.positions.get("TEST") is None
+    # Position should be closed
+    test_positions = [p for p in env.portfolio.positions.values() if p.symbol == "TEST"]
+    assert len(test_positions) == 0
     assert env.portfolio.get_equity() >= config.initial_capital  # profited from price jump
 
 
@@ -153,7 +158,9 @@ def test_stop_loss_triggers_on_price_drawdown(make_parquet):
     assert info["position_closed"] is not None
     assert info["position_closed"]["trigger"] == "stop_loss"
     assert info["position_closed"]["realized_pnl"] < 0
-    assert env.portfolio.positions.get("TEST") is None
+    # Position should be closed (multi-position uses position_id as key)
+    test_positions = [p for p in env.portfolio.positions.values() if p.symbol == "TEST"]
+    assert len(test_positions) == 0
     assert not terminated  # episode continues even after stop loss
 
 
@@ -177,7 +184,9 @@ def test_take_profit_triggers_on_price_spike(make_parquet):
 
     assert info["position_closed"] is not None
     assert info["position_closed"]["trigger"] == "take_profit"
-    assert env.portfolio.positions.get("TEST") is None
+    # Position should be closed (multi-position uses position_id as key)
+    test_positions = [p for p in env.portfolio.positions.values() if p.symbol == "TEST"]
+    assert len(test_positions) == 0
     assert not terminated and not truncated
 
 
@@ -298,6 +307,102 @@ def test_load_data_empty_after_filtering(make_parquet):
 
     with pytest.raises(ValueError, match="empty"):
         TradingEnvironment(config)
+
+
+def test_add_position_gate_blocks_overexposure(make_parquet):
+    data_path = make_parquet()
+    reward_cfg = RewardConfig()
+    reward_cfg.failed_action_penalty = -0.1
+
+    config = _make_config(
+        data_path,
+        commission_rate=0.0,
+        slippage_bps=0.0,
+        reward_config=reward_cfg,
+        stop_loss=1.0,
+        take_profit=1.0,
+        add_position_gate_enabled=True,
+        add_position_gate_max_exposure_pct=0.12,
+        add_position_gate_min_unrealized_pct=0.0,
+        add_position_gate_base_penalty=0.25,
+        add_position_gate_severity_multiplier=0.5,
+        add_position_gate_penalty_cap=1.2,
+        add_position_gate_violation_decay=5,
+    )
+
+    env = TradingEnvironment(config)
+    try:
+        env.reset(seed=17, options={"start_idx": config.lookback_window + 8})
+
+        env.step(TradeAction.BUY_LARGE.value)
+        _, reward1, _, _, info1 = env.step(TradeAction.ADD_POSITION.value)
+
+        assert info1["action_info"]["reject_reason"] == "add_gate_exposure"
+        gate_payload = info1.get("add_position_gate")
+        assert gate_payload is not None
+        assert gate_payload["reason"] == "add_gate_exposure"
+        assert math.isclose(gate_payload["penalty"], -0.25, rel_tol=1e-6)
+        assert reward1 - info1["reward_breakdown"]["total"] == pytest.approx(gate_payload["penalty"])
+
+        _, reward2, _, _, info2 = env.step(TradeAction.ADD_POSITION.value)
+        gate_payload_second = info2.get("add_position_gate")
+        assert gate_payload_second is not None
+        assert gate_payload_second["reason"] == "add_gate_exposure"
+        assert gate_payload_second["streak"] >= 2
+        assert abs(gate_payload_second["penalty"]) > abs(gate_payload["penalty"])
+        assert reward2 - info2["reward_breakdown"]["total"] == pytest.approx(gate_payload_second["penalty"])
+    finally:
+        env.close()
+
+
+def test_add_position_gate_blocks_negative_unrealized(make_parquet):
+    start_idx = 180
+    drop_index = start_idx + 1
+
+    def modifier(df: pd.DataFrame) -> None:
+        df.loc[drop_index, "close"] = df.loc[drop_index - 1, "close"] * 0.985
+        df.loc[drop_index, "high"] = df.loc[drop_index, "close"] * 1.001
+        df.loc[drop_index, "low"] = df.loc[drop_index, "close"] * 0.999
+
+    data_path = make_parquet(modifier=modifier)
+    reward_cfg = RewardConfig()
+    reward_cfg.failed_action_penalty = -0.1
+
+    config = _make_config(
+        data_path,
+        commission_rate=0.0,
+        slippage_bps=0.0,
+        reward_config=reward_cfg,
+        stop_loss=1.0,
+        take_profit=1.0,
+        add_position_gate_enabled=True,
+        add_position_gate_max_exposure_pct=0.5,
+        add_position_gate_min_unrealized_pct=0.0,
+        add_position_gate_base_penalty=0.25,
+        add_position_gate_severity_multiplier=0.5,
+        add_position_gate_penalty_cap=1.2,
+        add_position_gate_violation_decay=5,
+    )
+
+    env = TradingEnvironment(config)
+    try:
+        env.reset(seed=23, options={"start_idx": start_idx})
+
+        env.step(TradeAction.BUY_SMALL.value)
+        _, reward, _, _, info = env.step(TradeAction.ADD_POSITION.value)
+
+        assert info["action_info"]["reject_reason"] == "add_gate_unrealized"
+        gate_payload = info.get("add_position_gate")
+        assert gate_payload is not None
+        assert gate_payload["reason"] == "add_gate_unrealized"
+        assert gate_payload["metrics"]["unrealized_pnl_pct"] < 0.0
+        assert math.isclose(
+            reward - info["reward_breakdown"]["total"],
+            gate_payload["penalty"],
+            rel_tol=1e-6,
+        )
+    finally:
+        env.close()
 
 
 def test_load_sl_models_handles_outcomes(make_parquet, monkeypatch, tmp_path: Path):

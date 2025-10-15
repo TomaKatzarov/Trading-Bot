@@ -38,18 +38,18 @@ def sample_data() -> pd.DataFrame:
             "vwap": price + rng.normal(loc=0.0, scale=0.05, size=n_rows),
             "SMA_10": price,
             "SMA_20": price,
-            "MACD": rng.normal(loc=0.0, scale=0.5, size=n_rows),
+            "MACD_line": rng.normal(loc=0.0, scale=0.5, size=n_rows),  # Fixed: was "MACD"
             "MACD_signal": rng.normal(loc=0.0, scale=0.3, size=n_rows),
             "MACD_hist": rng.normal(loc=0.0, scale=0.2, size=n_rows),
             "RSI_14": rng.uniform(low=30.0, high=70.0, size=n_rows),
-            "Stochastic_K": rng.uniform(low=20.0, high=80.0, size=n_rows),
-            "Stochastic_D": rng.uniform(low=20.0, high=80.0, size=n_rows),
+            "Stoch_K": rng.uniform(low=20.0, high=80.0, size=n_rows),  # Fixed: was "Stochastic_K"
+            "Stoch_D": rng.uniform(low=20.0, high=80.0, size=n_rows),  # Fixed: was "Stochastic_D"
             "ADX_14": rng.uniform(low=10.0, high=40.0, size=n_rows),
             "ATR_14": rng.uniform(low=0.5, high=2.0, size=n_rows),
             "BB_bandwidth": rng.uniform(low=0.01, high=0.05, size=n_rows),
             "OBV": np.cumsum(rng.integers(low=-1_000, high=1_000, size=n_rows)),
             "Volume_SMA_20": rng.integers(low=1_000, high=10_000, size=n_rows),
-            "Return_1h": rng.normal(loc=0.0, scale=0.01, size=n_rows),
+            "1h_return": rng.normal(loc=0.0, scale=0.01, size=n_rows),  # Fixed: was "Return_1h"
             "sentiment_score_hourly_ffill": sentiment,
             "DayOfWeek_sin": np.sin(np.arange(n_rows) * 2 * np.pi / 7),
             "DayOfWeek_cos": np.cos(np.arange(n_rows) * 2 * np.pi / 7),
@@ -279,22 +279,28 @@ class TestFeatureExtractor:
     def test_get_sl_predictions_with_stubbed_inference(self, sample_data: pd.DataFrame) -> None:
         config = FeatureConfig(normalize_method="zscore")
 
-        module_name = "scripts.sl_checkpoint_utils"
-        fake_module = types.ModuleType(module_name)
+        # Import feature_extractor to directly patch run_inference
+        # MUST patch before creating FeatureExtractor since prefetch runs during __init__
+        from core.rl.environments import feature_extractor as fe_module
 
         def run_inference(bundle, input_tensor):
+            # Mock needs to return arrays matching batch size
+            # input_tensor shape is (batch, lookback, features)
+            batch_size = input_tensor.shape[0] if hasattr(input_tensor, 'shape') else 1
             if bundle == "mlp":
-                return {"probability": 0.91}
+                return {"probability": np.full(batch_size, 0.91)}
             if bundle == "lstm":
-                return [0.27]
+                return np.full(batch_size, 0.27)
             if bundle == "gru":
-                return 0.13
+                return np.full(batch_size, 0.13)
             raise RuntimeError("unexpected bundle")
 
-        fake_module.run_inference = run_inference  # type: ignore[attr-defined]
-        sys.modules[module_name] = fake_module
+        # Store original and patch BEFORE creating extractor
+        original_run_inference = fe_module.run_inference
+        fe_module.run_inference = run_inference
 
         try:
+            # Prefetch will run during init and use our patched run_inference
             extractor = FeatureExtractor(
                 sample_data,
                 config,
@@ -307,7 +313,8 @@ class TestFeatureExtractor:
 
             assert np.allclose(probs, [0.91, 0.27, 0.13])
         finally:
-            sys.modules.pop(module_name, None)
+            # Restore original
+            fe_module.run_inference = original_run_inference
 
     def test_prepare_dataframe_validations(self, sample_data: pd.DataFrame) -> None:
         config = FeatureConfig(normalize_method="none")

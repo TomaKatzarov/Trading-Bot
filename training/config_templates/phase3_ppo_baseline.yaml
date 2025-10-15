@@ -26,13 +26,13 @@ experiment:
 # PPO Hyperparameters (from Phase 3 planning)
 ppo:
   # Learning rate
-  learning_rate: 3.0e-4  # Standard PPO, cosine decay
-  lr_schedule: "cosine"  # Options: constant, linear, cosine
-  lr_min: 1.0e-5         # Minimum learning rate for decay schedules
+  learning_rate: 1.5e-4  # Slightly higher to recover learning pace (VecNormalize handles scale)
+  lr_schedule: "cosine"  # Tighter decay to hand off to fine-tuning as training progresses
+  lr_min: 1.0e-5         # Allow optimizer to settle near convergence
 
   # Training rollout collection
   n_steps: 2048          # Steps per update (per environment)
-  batch_size: 256        # Minibatch size for SGD
+  batch_size: 512        # Larger minibatch for stabler gradients
   n_epochs: 10           # Optimization epochs per update
   gamma: 0.99            # Discount factor
 
@@ -41,14 +41,15 @@ ppo:
 
   # PPO-specific
   clip_range: 0.2        # Policy clip range (standard)
-  clip_range_vf: null    # Value function clip (null = no clip)
+  clip_range_vf: 0.2     # Clip value loss to prevent explosions
+  target_kl: 0.08        # Soft KL ceiling to abort destabilising updates
 
-  # Regularization
-  ent_coef: 0.01         # Entropy coefficient (exploration)
-  ent_decay: 0.995       # Multiplicative decay per update
-  ent_min: 0.001         # Minimum entropy coefficient
-  vf_coef: 0.5           # Value function coefficient
-  max_grad_norm: 0.5     # Gradient clipping (transformer stability)
+  # Regularization & exploration backbone (Stage 1 rework - 2025-10-10)
+  ent_coef: 0.08         # Higher initial exploration to prevent collapse
+  ent_decay: 1.0         # Legacy knob unused; kept for backwards compat
+  ent_min: 0.03          # Slightly higher entropy floor
+  vf_coef: 0.4           # Value function coefficient
+  max_grad_norm: 0.3     # Tighter gradient clipping for stability
 
   # Advantage normalization
   normalize_advantage: true
@@ -62,6 +63,36 @@ ppo:
       vf: [256, 128]
     ortho_init: true
 
+  optimizer:
+    beta1: 0.95           # Adam beta1 tuned for PPO stability under trading regime
+    beta2: 0.95           # Reduce beta2 to track non-stationary gradients faster
+    weight_decay: 1.0e-4   # Light L2 regularisation for critic/actor
+    warmup_steps: 3000     # LR warmup to prevent early exploding updates
+    warmup_floor: 3.0e-5   # Start near floor and ramp to target LR
+
+  entropy_scheduler:
+    strategy: "hold_then_linear"
+    initial: 0.08
+    final: 0.03
+    hold_steps: 10000   # Shorter hold, faster decay to keep exploration alive
+    decay_steps: 40000
+    min: 0.03
+
+  entropy_bonus:
+    enabled: true
+    target_entropy: 0.55
+    bonus_scale: 0.35
+    decay_rate: 0.12
+    warmup_steps: 4000
+    max_multiplier: 3.0
+    floor: 0.02
+
+  kl_covariance_guard:
+    enabled: true
+    threshold: 0.18
+    penalty_scale: 0.45
+    min_multiplier: 0.6
+
 # Training schedule
 training:
   total_timesteps: 100000    # 100k steps per agent (~2-3 hours)
@@ -69,46 +100,241 @@ training:
   save_freq: 10000           # Save checkpoint every 10k steps
   n_eval_episodes: 10        # Episodes per evaluation
   log_interval: 100          # Log every 100 updates
-  n_envs: 8                  # Vectorized environments per agent
+  n_envs: 16                 # Vectorized environments per agent
   seed: 42                   # Global seed for reproducibility
+  # CRITICAL FIX (2025-10-08): Reward normalization DISABLED
+  # VecNormalize was clipping/normalizing rewards to constant values early in
+  # training (all rewards → ±5.0), destroying the reward signal gradient needed
+  # for the policy to differentiate between actions. This caused collapse to
+  # whichever action was randomly sampled first. Our reward shaper already clips
+  # to [-2.0, +2.0], making VecNormalize redundant and harmful.
+  reward_normalization:
+    enabled: true
+    norm_obs: false          # Observation normalization OK (future consideration)
+    norm_reward: false       # DISABLED (was true) - CRITICAL FIX
+    clip_reward: 10.0        # Increased (was 5.0) if normalization re-enabled later
+    gamma: 0.99
+
+  telemetry:
+    histogram_bins: 24
+    max_samples: 4096
+    log_every: 1
 
   # Callbacks
   early_stopping:
     enabled: true
-    patience: 5              # Stop if no improvement for 5 evals
-    min_delta: 0.01          # Minimum Sharpe improvement
+    patience: 6              # Quicker reaction once validation stalls
+    min_delta: 0.01          # Treat moderate degradations as significant
     metric: "sharpe"
+
+  # Automatically promote checkpoints that outperform the terminal snapshot
+  promotion_metric: "sharpe"
+  promotion_min_delta: 0.0025
 
   checkpoint_on_best: true   # Save best model during training
 
+  # Runtime safety net for catastrophic policy updates
+  stability_guard:
+    enabled: true
+    approx_kl_threshold: 0.12      # Halt-and-recover when KL shoots above this
+    clip_fraction_threshold: 0.6   # Detect near-saturated updates
+    value_loss_threshold: 400.0    # Guardrail for runaway critic loss
+    trigger_patience: 1            # React immediately on the first breach
+    cooldown_steps: 8000           # Give policy time to stabilise before next intervention
+    lr_decay_factor: 0.5           # Halve the learning rate on intervention
+    min_lr: 1.0e-5                 # Do not shrink LR beneath this floor
+    max_mitigations: 4             # Beyond this, halt training for manual inspection
+
+  performance_guard:
+    enabled: true
+    metric: "sharpe"
+    threshold: 0.0
+    warmup_steps: 30000
+    patience: 2
+
+  action_entropy_guard:
+    enabled: true             # ENABLED - Early stop if entropy collapses
+    threshold: 0.22           # Halt/boost if entropy falls below 0.22
+    warmup_steps: 4000        # Start checking after 4k steps
+    patience: 2
+    boost_multiplier: 1.7
+    max_multiplier: 3.0
+    boost_floor: 0.03
+    cooldown_steps: 6000
+    max_interventions: 2
+    halt_on_failure: true
+    halt_on_cooldown: false
+    halt_on_limit: true
+
 # Environment configuration
 environment:
-  episode_length: 168        # 1 week (168 hours)
+  action_mode: "discrete"  # Switch to "continuous" or "hybrid" when migrating agents off discrete PPO
+  episode_length: 672       # 500 hours (~4 weeks) for better learning signal
   lookback_window: 24        # 1-day lookback
+  continuous_settings:
+    hold_threshold: 0.05
+    max_position_pct: 0.12
+    smoothing_window: 5
+    transaction_cost: 0.002
+    min_trade_value: 50.0
   initial_capital: 10000.0
-  commission_rate: 0.001     # 0.1% per trade
-  slippage_pct: 0.0005       # 0.05% slippage
-  stop_loss_pct: 0.02        # 2% stop loss
-  take_profit_pct: 0.025     # 2.5% take profit
-  max_hold_hours: 8
-  log_level: "WARNING"
+  commission_rate: 0.00002    # Alpaca realistic: ~$0.0000278 clearing + $0.000166 TAF (sell) ≈ 0.00002 avg
+  slippage_pct: 0.0001        # Minimal slippage for liquid ETFs (1 basis point)
+  stop_loss_pct: null         # DISABLED - Agent must learn to close positions
+  take_profit_pct: null       # DISABLED - Agent must learn to close positions  
+  max_hold_hours: 500         # Max episode length (agent decides when to close)
+  log_level: "INFO"
   log_trades: false
 
-  # Reward weights (from Phase 3 planning)
+  # Exploration curriculum (2025-10-09 Anti-Collapse v11)
+  # A mild coverage schedule to prevent deterministic BUY-only policies while
+  # avoiding the heavy-handed penalties that previously crushed the reward signal.
+  # Phase 1 (first 40k steps): require at least 5% SELL_* and BUY_* usage within
+  # the rolling window, applying small penalties when coverage falls short.
+  # Phase 2 (40k-80k): requirements remain but the penalties relax by 50%.
+  # Phase 3 (80k+): curriculum disengages and policy can fully exploit.
+  # HOLD and ADD_POSITION are excluded so we only target the core trade cycle.
+  # Aggregated penalties now severity-scale (up to ~2× base) so chronic shortfalls
+  # actually bite while still letting realized PnL dominate once requirements are met.
+  exploration_curriculum:
+    enabled: true
+    phase1_end_step: 40000
+    phase1_min_action_pct: 0.01      # Require at least 1% execution share per non-HOLD action
+    phase1_penalty: -0.04            # Heavier base penalty so aggregated SELL/BUY gaps matter
+    phase2_end_step: 80000
+    phase2_min_action_pct: 0.005     # Relax to 0.5% per action before tapering off
+    phase2_penalty: -0.02
+    evaluation_window: 120
+    excluded_actions:
+      - HOLD
+      - ADD_POSITION
+    require_sell_actions: true
+    min_sell_pct: 0.05
+    sell_penalty_multiplier: 3.5
+    require_buy_actions: true
+    min_buy_pct: 0.05
+    buy_penalty_multiplier: 2.5
+  
+  # EPSILON-GREEDY EXPLORATION (DISABLED 2025-10-08 V10.1)
+  # V10 CATASTROPHIC FAILURE ANALYSIS:
+  # - 50% random actions → tons of rejected SELL/ADD (no position exists)
+  # - Weak -0.05 penalty → policy learned "rejected actions are safe"
+  # - Result: 100% SELL_PARTIAL predictions, all rejected, ZERO trades
+  # 
+  # ROOT CAUSE: Epsilon-greedy is FUNDAMENTALLY WRONG for action-dependent environments
+  # - SELL requires prior BUY (dependencies)
+  # - Random SELL without BUY → rejection → weak penalty → policy thinks "this is fine"
+  # - Agent never learns BUY→SELL cycle because rejected actions seem "good enough"
+  # 
+  # LESSON: Use action masking (disable invalid actions) or structured exploration,
+  # NOT random exploration in environments with action dependencies!
+  epsilon_greedy:
+    enabled: true   # Re-enabled with state-aware masking (2025-10-08) for safe exploration
+    epsilon_start: 0.25              # Slightly higher start to recover exploration diversity
+    epsilon_end: 0.05                # Maintain a modest exploration floor after decay
+    epsilon_decay_steps: 20000       # Slower decay to keep exploration alive longer
+    epsilon_decay_type: "linear"
+  
+  # ACTION RESTRICTIONS (2025-10-08 v10 RADICAL FIX)
+  # Disable ADD_POSITION during initial training to focus on core BUY→SELL cycle
+  disabled_actions: []  # All actions available; ADD_POSITION guarded by confidence heuristics
+
+  # Reward weights (RESET TO PROFIT-FOCUSED - 2025-10-08 v10)
+  # CRITICAL FIX: Artificial rewards were giving false confidence
+  # NEW APPROACH: Clean PnL-focused rewards + epsilon-greedy exploration
   reward_weights:
-    pnl: 0.40              # Primary objective
-    cost: 0.15             # SL failure #1 (transaction costs)
-    time: 0.15             # SL failure #2 (timing)
-    sharpe: 0.05           # Risk-adjusted
-    drawdown: 0.10         # SL failure #5 (risk management)
-    sizing: 0.05           # Position quality
-    hold: 0.00             # Disabled (no-trade penalty)
+    pnl: 0.75              # Slightly reduced to make room for diversity
+    cost: 0.10             # Transaction cost awareness
+    time: 0.0              # Still disabled
+    sharpe: 0.03           # Light risk-adjustment
+    drawdown: 0.02         # Light drawdown protection
+    sizing: 0.0            # Disabled
+    hold: 0.0              # Disabled
+    diversity_bonus: 0.07  # ENABLED: Encourage action diversity
+    action_repeat_penalty: 0.05  # Penalize excessive repetition streaks
+    intrinsic_action_reward: 0.01  # Tiny bonus for valid non-HOLD actions
+    pnl_scale: 0.01
+    target_sharpe: 0.30
+    min_trades_for_sharpe: 6
+    neutral_exposure_pct: 0.12
+    sizing_optimal_low: 0.35
+    sizing_optimal_high: 0.65
+    sizing_positive_bonus: 0.22
+    sizing_moderate_bonus: 0.06
+    sizing_penalty_high: 0.25
+    transaction_cost_pct: 0.0002
+    failed_action_penalty: -0.14   # Slightly stronger penalty for invalid/repeat actions
+    quick_win_bonus: 0.03
+    loss_penalty_multiplier: 1.10  # Slightly stronger penalty for losses
+    max_single_loss: 0.015
+    severe_loss_penalty: -2.5
+    roi_multiplier_enabled: true
+    roi_scale_factor: 2.0
+    roi_gate_floor_scale: 0.4
+    forced_exit_penalty: 0.0
+    forced_exit_base_penalty: 0.2
+    forced_exit_loss_scale: 2.8
+    forced_exit_penalty_cap: 1.8
+    sharpe_gate_enabled: true
+    sharpe_gate_window: 40
+    sharpe_gate_min_self_trades: 20
+    sharpe_gate_floor_scale: 0.33
+    sharpe_gate_active_scale: 1.0
+    time_decay_threshold_hours: 18
+    time_decay_penalty_per_hour: 0.003
+    time_decay_max_penalty: 0.05
+    
+    # CRITICAL FIX (2025-10-08): Realized vs Unrealized PnL
+    # PROFESSIONAL TRADING STRATEGY V3.1:
+    # 1. BUY has NO immediate reward, but SIZE tracked for multiplier
+    # 2. ALL rewards come from SELL - scaled by profit AND position size
+    # 3. HOLD gets small penalty if position winning/losing (encourages action)
+    # 4. ADD_POSITION enabled for confidence-based pyramiding
+    
+    # Core PnL Settings
+    realized_pnl_weight: 1.0       # 100% of reward from SELL actions only
+    unrealized_pnl_weight: 0.0     # NO reward for unrealized gains (HOLD gets nothing)
+    closing_bonus_multiplier: 1.0  # No extra multiplier, just use realized PnL
+    
+    # Position Sizing Multipliers (V3.1 - Conservative Risk Management)
+    # Encourage small positions for better risk management
+    position_size_small_multiplier: 1.2    # BUY_SMALL: 20% bonus (conservative)
+    position_size_medium_multiplier: 1.0   # BUY_MEDIUM: neutral (default)
+    position_size_large_multiplier: 0.8    # BUY_LARGE: 20% penalty (risky)
+    
+    # Exit Strategy Multipliers (V3.1 - Professional Trading)
+    # Encourage scaling out of winners
+    partial_exit_multiplier: 0.8      # SELL_PARTIAL: 80% reward (keeps 50% running)
+    full_exit_multiplier: 1.0         # SELL_ALL: 100% reward (closes everything)
+    staged_exit_bonus: 1.1            # PARTIAL→ALL: 10% bonus (professional staging)
+    
+    # ADD_POSITION Settings (V3.1 - Confidence-Based Pyramiding)
+    # Allow adding to winning positions when model is highly confident
+    add_position_enabled: true                    # Enable smart pyramiding
+    add_position_min_profit_pct: 0.008            # Encourage adds once ~0.8% unrealized profit accrued
+    add_position_confidence_threshold: 0.42       # New heuristic scaling keeps adds gated to strong setups
+    add_position_immediate_reward: 0.0           # No immediate reward (like BUY)
+    add_position_pyramid_bonus: 1.3              # 30% bonus on final SELL (pyramiding reward)
+    add_position_max_adds: 2                     # Max 2 additions per position
+    add_position_invalid_penalty: -1.0           # Penalty for invalid ADD attempts
+    
+  manual_exit_bonus: 0.04        # Reward proactive exits
+  reward_clip: 2.0       # Slightly tighter clip with new scaling
 
   # Risk limits
   max_position_pct: 0.20     # Max 20% per position
   max_portfolio_exposure: 0.90  # Max 90% total exposure
-  max_portfolio_drawdown: 0.30  # Emergency stop at 30% drawdown
-  max_position_loss: 0.08       # Auto-close at -8%
+  max_portfolio_drawdown: 0.12  # Emergency stop tightened to 12% drawdown (Stage 3)
+  max_position_loss: 0.03       # Auto-close at -3% loss per position (Stage 3)
+
+  add_position_gate:
+    enabled: true
+    max_exposure_pct: 0.12            # Block adds when post-add exposure exceeds 12%
+    min_unrealized_pnl_pct: 0.0       # Block adds if trade is not in profit yet
+    base_penalty: 0.25                # Base curriculum penalty for violations
+    severity_multiplier: 0.5          # Escalate penalty per repeated violation
+    penalty_cap: 1.5                  # Cap cumulative penalty per event
+    violation_decay_steps: 2500       # Cooldown before streak resets
 
   # Feature dimensions (for documentation/validation purposes)
   technical_features: 23     # Technical indicators
@@ -119,7 +345,11 @@ environment:
   regime_features: 10        # Market regime
 
   # Optional supervised-learning checkpoints to warm-start features
-  sl_checkpoints: {}
+  sl_checkpoints:
+    mlp: "models/sl_checkpoints/mlp_trial72_epoch3"
+    lstm: "models/sl_checkpoints/lstm_trial62_epoch1"
+    gru: "models/sl_checkpoints/gru_trial93_epoch4"
+  sl_inference_device: "auto"   # Use "auto" to prefer GPU when available
 
 # Monitoring
 monitoring:

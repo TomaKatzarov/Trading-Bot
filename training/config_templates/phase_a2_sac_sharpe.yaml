@@ -1,0 +1,240 @@
+experiment:
+  name: "phase_a2_sac_sharpe"
+  description: "Phase 2a baseline training with 10 symbols"
+  symbols:
+    - SPY   # S&P 500 ETF
+    - QQQ   # Nasdaq 100 ETF
+    - AAPL  # Apple
+    - MSFT  # Microsoft
+    - NVDA  # NVIDIA
+    - AMZN  # Amazon
+    - META  # Meta Platforms
+    - TSLA  # Tesla
+    - JPM   # JP Morgan
+    - XOM   # Exxon Mobil
+
+  # Paths
+  data_dir: "data/phase3_splits"
+  output_dir: "models/phase_a2_sac_sharpe"  # FIXED: was checkpoint_dir, script expects output_dir
+  log_dir: "logs/phase_a2_sac_sharpe"
+  mlflow_uri: "file:./mlruns"
+
+training:
+  total_timesteps: 500000  # INCREASED from 120k → 500k (stable optimizer needs time)
+  seed: 1989
+  log_freq: 1000  # PERFORMANCE: Reduced from 250 to 1000 (4x less frequent logging)
+  entropy_window: 672
+  metrics_log_freq: 2000  # PERFORMANCE: Further reduce callback load for faster stepping
+  eval_freq: 50000
+  n_eval_episodes: 16
+  save_best_model: true
+  save_interval: 100000  # Save every 100k steps
+  save_final_model: true
+  n_envs: 16  # PERFORMANCE: Reduced from 40 to 16 (optimal for Windows + single GPU; 2.5x less IPC overhead)
+
+evaluation:
+  episodes: 80
+  continuous_temperature: 1.95
+  stochastic_continuous: true
+
+environment:
+  symbol: "SPY"
+  data_path: "data/phase3_splits"
+  action_mode: "continuous"
+  episode_length: 672  # PERFORMANCE: Reduced from 1344 to 672 (28 days; 2x faster episodes, still sufficient for Sharpe)
+  lookback_window: 24
+  vec_env_type: "subproc"  # PERFORMANCE: SubprocVecEnv for n_envs=8 is acceptable on Windows
+  max_hold_hours: 672  # FIX #9: FROM 8 → 500 (agent decides when to exit, not forced!)
+  stop_loss: 0.999  # FIX #10: FROM 0.02 → 0.99 (DISABLE auto stop-loss!)
+  take_profit: 0.999  # FIX #10: FROM 0.025 → 0.99 (DISABLE auto take-profit!)
+  # FIX #3 & #5: Atomic transaction costs + Anti-collapse exploration
+  continuous_settings:
+    hold_threshold: 0.001  # REDUCED from 0.0025 → 0.001 to prevent action collapse to HOLD
+    max_position_pct: 0.45  # INCREASED from 0.40 → 0.45 (wider position sizing range)
+    smoothing_window: 1  # FIX #5: FROM 2 → 1 (remove smoothing bias toward extremes)
+    transaction_cost: 0.00005  # FIX #3: FROM 0.0005 → 0.00005 (10x reduction - atomic costs!)
+    min_trade_value: 5.0
+    min_hold_steps: 1  # REDUCED from 2 → 1 (allow faster exits)
+  portfolio_config:
+    # ===== MULTI-POSITION SUPPORT =====
+    max_positions: 3  # Allow up to 3 concurrent positions (was 1)
+    allow_multiple_positions_per_symbol: true  # Enable multiple entries for same symbol
+    shorting_enabled: true  # Enable short selling capability
+    short_margin_requirement: 1.5  # 150% margin for shorts (regulatory standard)
+    
+    # Position sizing and risk limits
+    min_position_value_pct: 0.02  # Allow smaller probe trades once capital is committed
+    max_position_size_pct: 0.45  # FIX #11: FROM 0.10 → 0.45 (match continuous max_position_pct!)
+    max_position_loss_pct: 0.999  # FIX #10: FROM 0.05 → 0.99 (DISABLE auto position stop-loss!)
+    max_portfolio_loss_pct: 0.999  # FIX #10: FROM 0.20 → 0.99 (DISABLE auto portfolio stop-loss!)
+  reward_config:
+    # --- SIMPLIFIED REWARD FUNCTION TO MITIGATE HOLD COLLAPSE ---
+    pnl_weight: 0.95  # Increased PnL weight to ensure it dominates
+    diversity_bonus_weight: 0.15  # MODIFIED: Increased from 0.05 to encourage action diversity and break HOLD pattern.
+    
+    # Drastically reduce transaction cost weight; base cost is already very low
+    transaction_cost_weight: 0.001  # Drastically reduced from 0.10 (100x reduction)
+    base_transaction_cost_pct: 0.00005
+
+    # DISABLE ALL SECONDARY PENALTIES INITIALLY to get the agent trading
+    time_efficiency_weight: 0.0
+    drawdown_weight: 0.0
+    sizing_weight: 0.0
+    action_repeat_penalty_weight: 0.0
+    hold_penalty_weight: 0.040  # MODIFIED: Added a tiny penalty to discourage idling and act as a tie-breaker against HOLD.
+    intrinsic_action_reward: 0.01  # Small intrinsic reward to encourage action changes
+    equity_delta_weight: 0.0
+
+    # PnL Amplification is good, keep as is
+    pnl_scale: 0.0001
+    reward_clip: 1250.0
+
+    # Keep Sharpe/ROI mechanics disabled initially, remove conflicting logic
+    sharpe_weight: 0.0
+    sharpe_gate_enabled: false
+    roi_multiplier_enabled: false
+    roi_scale_factor: 1.0
+    roi_neutral_zone: 0.0001  # CRITICAL: Ensure this is indeed small
+    roi_negative_scale: 1.0
+    roi_positive_scale: 1.0
+    
+    # Set multipliers to neutral (1.0) or remove if not applicable with disabled ROI
+    win_bonus_multiplier: 2.0  # Neutral, let PnL dictate
+    loss_penalty_multiplier: 1.0  # Explicitly strengthen loss penalties as per comment's intent. Was 1.0
+                                  # Justification: Balance encouraging trades with not tolerating losses.
+                                  # The previous comment's intent was to strengthen, so setting to 1.2.
+
+    # Legacy params (keep for compatibility but ensure they are neutral)
+    sharpe_neutral_zone: 1.0
+    sharpe_negative_scale: 1.0
+    sharpe_positive_scale: 1.0
+    sharpe_full_penalty_trades: 240
+    sharpe_gate_min_self_trades: 240
+    sharpe_gate_floor_scale: 0.3
+    sharpe_gate_active_scale: 1.0
+    roi_full_penalty_trades: 240
+    
+    # Set to neutral initially to avoid complex interactions
+    position_size_small_multiplier: 1.0
+    position_size_medium_multiplier: 1.0
+    position_size_large_multiplier: 1.0
+    full_exit_multiplier: 1.0
+    staged_exit_bonus: 1.0
+    partial_exit_multiplier: 1.0
+    
+    time_decay_threshold_hours: 72.0
+    time_decay_penalty_per_hour: 0.004
+
+    # --- SIMPLIFIED ANTI-COLLAPSE & ADVANCED AUGMENTATIONS ---
+    # Disable aggressive diversity penalties
+    diversity_penalty_weight: 0.0  # CRITICAL: Disable this. It's heavily penalizing 90% HOLD.
+    diversity_penalty_target: 0.15
+    diversity_penalty_window: 10
+    
+    # Disable trade frequency penalty
+    trade_frequency_penalty_weight: 0.0  # CRITICAL: Disable this. It's penalizing any action.
+    hold_bonus_weight: 0.0
+    
+    # Disable complex reward augmentations
+    progressive_roi_enabled: false  # CRITICAL: Disable complex ROI scaling
+    progressive_roi_thresholds: [0.05, 0.02, 0.0, -0.01, -0.02]
+    progressive_roi_multipliers: [3.0, 2.0, 1.5, 0.5, 1.0, 2.0]
+    
+    # Momentum is a form of reward shaping, keep it simple for now or set to 0.0
+    momentum_weight: 0.0  # Disable momentum initially
+    momentum_window: 24
+    momentum_max_reward: 0.3
+    
+    # Disable context-dependent scaling
+    context_scaling_enabled: false  # CRITICAL: Disable complex context scaling
+    overtrading_threshold: 0.48
+    overtrading_penalty_scale: 0.5
+    patient_trading_threshold: 0.30
+    patient_trading_bonus: 1.2
+    low_winrate_threshold: 0.48
+    low_winrate_penalty_scale: 0.7
+    
+    # Disable adaptive win multiplier
+    adaptive_win_multiplier_enabled: false  # CRITICAL: Disable adaptive win bonus
+    adaptive_win_base_multiplier: 1.8
+    adaptive_win_max_multiplier: 2.5
+    adaptive_win_min_multiplier: 1.2
+    action_concentration_threshold: 0.50
+    high_entropy_threshold: 2.5
+    overtrading_action_threshold: 0.48
+    
+    # Keep action entropy bonus to encourage diversity for now
+    entropy_bonus_weight: 0.20  # Keep this to still encourage policy exploration
+    entropy_bonus_target: 2.5
+    entropy_bonus_scale: 0.5
+    
+  # FIX #5: STRONG EXPLORATION TO PREVENT ACTION COLLAPSE
+  epsilon_greedy_enabled: true
+  epsilon_start: 0.25  # Restore early exploration strength
+  epsilon_end: 0.08  # Maintain modest stochasticity throughout training
+  epsilon_decay_steps: 400000  # Slower anneal so exploration persists longer
+
+sac:
+  base_learning_rate: 0.00025
+  warmup_fraction: 0.10  # Increased from 0.05 to 0.10.
+                         # Justification: Slower warmup allows more initial exploration with lower LR, preventing premature convergence to 'HOLD'.
+  buffer_size: 200000
+  learning_starts: 2000
+  batch_size: 256  
+  tau: 0.005
+  gamma: 0.992
+  train_freq: 1
+  gradient_steps: 2  
+  auto_scale_gradient_steps: false
+
+  # --- CRITICAL FIX FOR SAC ENTROPY MISMATCH ---
+  ent_coef: 0.05  # Changed from "auto_0.35" to a fixed, low value.
+                  # Justification: The observed ent_coef (1.21) is wildly high, indicating policy instability.
+                  # Forcing a low, fixed value initially prevents runaway entropy regularization
+                  # and allows the agent to focus on maximizing rewards without being overly
+                  # penalized for not being random. We want to find *any* profitable action first.
+  target_update_interval: 1
+  target_entropy: -1.0  # Keep this, as ent_coef is now fixed, this value won't drive its scale directly.
+  ent_coef_lower_bound: 0.05  # Changed from 0.15 to match the new fixed ent_coef.
+                              # Justification: Ensure the lower bound is consistent with the fixed value.
+  lr_cycles: 4
+  lr_min_fraction: 0.25
+  use_sde: false
+  action_noise_sigma: 0.10
+  action_noise_theta: 0.15
+  action_noise_dt: 0.02
+  use_amp: true
+  policy_kwargs:
+    net_arch:
+      - 512
+      - 512
+    log_std_init: -0.9
+  compile_policy: true  # PERFORMANCE: Enable torch.compile for ~15-30% speedup on CUDA (requires triton)
+  optimizer_kwargs:
+    betas: [0.9, 0.9]
+    eps: 1.0e-8
+    weight_decay: 0.01
+
+icm:
+  # TIER 2 FIX 2.1: Extended ICM exploration throughout full training run
+  enabled: true
+  eta: 0.006
+  beta: 0.2
+  hidden_dim: 256
+  feature_dim: 128
+  extrinsic_weight: 0.97
+  intrinsic_weight: 0.003
+  intrinsic_warmup_weight: 0.003
+  intrinsic_warmup_steps: 10000
+  intrinsic_final_weight: 0.0005  # SLOW DECAY from 0.001 → 0.0005 (maintain exploration)
+  intrinsic_decay_after_steps: 30000  # EXTENDED from 10000 → 30000 (delay decay start)
+  intrinsic_decay_duration: 90000  # EXTENDED from 35000 → 90000 (gradual decay)
+  intrinsic_decay_type: cosine
+  minimum_intrinsic_weight: 0.0
+  disable_when_positive_sharpe: true
+  disable_sharpe_threshold: -0.5
+  resume_sharpe_threshold: -0.01
+  disable_reward_std_threshold: 0.02
+  icm_lr: 0.00008
+  train_freq: 4  # PERFORMANCE: Reduced from 1 to 4 (train ICM every 4 gradient steps instead of every step; 4x speedup)
+  warmup_steps: 3000

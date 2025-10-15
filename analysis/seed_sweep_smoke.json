@@ -1,0 +1,285 @@
+{
+  "config": "C:\\TradingBotAI\\training\\config_templates\\phase3_ppo_baseline.yaml",
+  "symbols": [
+    "SPY"
+  ],
+  "seeds": [
+    99
+  ],
+  "total_timesteps": 2048,
+  "results": [
+    {
+      "symbol": "SPY",
+      "status": "success",
+      "duration_hours": 0.005815252777777777,
+      "total_timesteps": 2048,
+      "final_model_path": "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\final_model.zip",
+      "best_metric": 0.0,
+      "best_summary": {
+        "episodes": 10.0,
+        "total_return_mean": 0.0,
+        "total_return_std": 0.0,
+        "total_return_pct_mean": 0.0,
+        "total_return_pct_std": 0.0,
+        "sharpe_ratio_mean": 0.0,
+        "sharpe_ratio_std": 0.0,
+        "sortino_ratio_mean": 0.0,
+        "sortino_ratio_std": 0.0,
+        "max_drawdown_mean": 0.0,
+        "max_drawdown_std": 0.0,
+        "max_drawdown_pct_mean": 0.0,
+        "max_drawdown_pct_std": 0.0,
+        "win_rate_mean": 0.0,
+        "win_rate_std": 0.0,
+        "avg_trade_duration_mean": 0.0,
+        "avg_trade_duration_std": 0.0,
+        "episode_reward_mean": 0.0,
+        "episode_reward_std": 0.0,
+        "episode_length_mean": 168.0,
+        "episode_length_std": 0.0
+      },
+      "final_summary": {
+        "episodes": 10.0,
+        "total_return_mean": 0.0,
+        "total_return_std": 0.0,
+        "total_return_pct_mean": 0.0,
+        "total_return_pct_std": 0.0,
+        "sharpe_ratio_mean": 0.0,
+        "sharpe_ratio_std": 0.0,
+        "sortino_ratio_mean": 0.0,
+        "sortino_ratio_std": 0.0,
+        "max_drawdown_mean": 0.0,
+        "max_drawdown_std": 0.0,
+        "max_drawdown_pct_mean": 0.0,
+        "max_drawdown_pct_std": 0.0,
+        "win_rate_mean": 0.0,
+        "win_rate_std": 0.0,
+        "avg_trade_duration_mean": 0.0,
+        "avg_trade_duration_std": 0.0,
+        "episode_reward_mean": 0.0,
+        "episode_reward_std": 0.0,
+        "episode_length_mean": 168.0,
+        "episode_length_std": 0.0
+      },
+      "checkpoints": [
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\best_model.zip",
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\final_model.zip",
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\SPY_checkpoint_2048_steps.zip",
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\SPY_checkpoint_4096_steps.zip",
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\SPY_checkpoint_6144_steps.zip",
+        "models\\phase3_checkpoints\\seed_sweep\\smoke\\seed_99\\SPY\\SPY_checkpoint_8192_steps.zip"
+      ],
+      "error": null,
+      "config_fingerprint": "ee72cd4d8f4386593b94cf3f0cf7dcd12c94a692893625723e5b5ffe13b9b722",
+      "reward_snapshot": {
+        "pnl_weight": 0.85,
+        "transaction_cost_weight": 0.04,
+        "time_efficiency_weight": 0.06,
+        "sharpe_weight": 0.0,
+        "drawdown_weight": 0.05,
+        "sizing_weight": 0.0,
+        "hold_penalty_weight": 0.0,
+        "pnl_scale": 0.005,
+        "target_sharpe": 0.25,
+        "base_transaction_cost_pct": 0.0001,
+        "quick_win_bonus": 0.05,
+        "loss_penalty_multiplier": 0.9,
+        "reward_clip": 3.0
+      }
+    }
+  ],
+  "aggregate": {
+    "SPY": {
+      "episodes": {
+        "values": [
+          10.0
+        ],
+        "mean": 10.0,
+        "std": 0.0,
+        "min": 10.0,
+        "max": 10.0
+      },
+      "total_return_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "total_return_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "total_return_pct_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "total_return_pct_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "sharpe_ratio_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "sharpe_ratio_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "sortino_ratio_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "sortino_ratio_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "max_drawdown_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "max_drawdown_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "max_drawdown_pct_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "max_drawdown_pct_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "win_rate_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "win_rate_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "avg_trade_duration_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "avg_trade_duration_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "episode_reward_mean": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "episode_reward_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "episode_length_mean": {
+        "values": [
+          168.0
+        ],
+        "mean": 168.0,
+        "std": 0.0,
+        "min": 168.0,
+        "max": 168.0
+      },
+      "episode_length_std": {
+        "values": [
+          0.0
+        ],
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "config_fingerprint": "ee72cd4d8f4386593b94cf3f0cf7dcd12c94a692893625723e5b5ffe13b9b722"
+    }
+  }
+}
