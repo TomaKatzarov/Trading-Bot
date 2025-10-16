@@ -39,14 +39,14 @@ training:
   entropy_window: 672
   metrics_log_freq: 1000  # PERFORMANCE: Further reduce callback load for faster stepping
   eval_freq: 15000
-  n_eval_episodes: 80
+  n_eval_episodes: 60
   save_best_model: true
   save_interval: 100000  # Save every 100k steps
   save_final_model: true
   n_envs: 16  # PERFORMANCE: Reduced from 40 to 16 (optimal for Windows + single GPU; 2.5x less IPC overhead)
 
 evaluation:
-  episodes: 80
+  episodes: 60
   continuous_temperature: 1.99
   stochastic_continuous: true
 
@@ -217,6 +217,7 @@ sac:
   action_noise_theta: 0.15
   action_noise_dt: 0.02
   use_amp: true
+  enable_anomaly_detection: false
   policy_kwargs:
     net_arch:
       - 512
@@ -257,6 +258,7 @@ icm:
 # ============================================================================
 options:
   enabled: true                    # Enable hierarchical options framework
+  use_amp: false                   # Force float32 precision for options controller
   
   # Architecture
   state_dim: 578                   # Flattened observation dimension (actual from environment)

@@ -6,13 +6,15 @@ import copy
 import inspect
 import json
 import logging
+import math
+import os
 import shutil
 import warnings
 from contextlib import nullcontext
 from collections import Counter, deque, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union, Mapping
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping
 
 # Suppress PyTorch TF32 deprecation warnings before torch import
 warnings.filterwarnings("ignore", message=".*TF32.*", category=UserWarning)
@@ -1272,6 +1274,12 @@ class SACWithICM(SAC):
 
     def train(self, gradient_steps: int, batch_size: int = 64) -> None:  # type: ignore[override]
         self.policy.set_training_mode(True)
+        if getattr(self, "_anomaly_detection_enabled", False):
+            try:
+                if not torch.is_anomaly_enabled():
+                    torch.autograd.set_detect_anomaly(True)
+            except AttributeError:
+                torch.autograd.set_detect_anomaly(True)
         optimizers = [self.actor.optimizer, self.critic.optimizer]
         if self.ent_coef_optimizer is not None:
             optimizers.append(self.ent_coef_optimizer)
@@ -1351,6 +1359,53 @@ class SACWithICM(SAC):
             autocast_args = ()
             autocast_kwargs = {}
 
+        def _finite_check(name: str, value: Any, *, max_entries: int = 5) -> Tuple[bool, Optional[Dict[str, Any]]]:
+            """Recursively verify finiteness for nested tensors and collect first offending entry."""
+            if isinstance(value, torch.Tensor):
+                finite_mask = torch.isfinite(value)
+                if bool(finite_mask.all()):
+                    return True, None
+                nonfinite_indices = torch.nonzero(~finite_mask, as_tuple=False)
+                sampled_indices = nonfinite_indices[:max_entries].cpu().tolist()
+                sampled_values = value[~finite_mask][:max_entries].detach().cpu().tolist()
+                return False, {
+                    "path": name or "<tensor>",
+                    "indices": sampled_indices,
+                    "values": sampled_values,
+                }
+            if isinstance(value, Mapping):
+                for key, sub_value in value.items():
+                    ok, info = _finite_check(f"{name}.{key}" if name else str(key), sub_value, max_entries=max_entries)
+                    if not ok:
+                        return False, info
+                return True, None
+            if isinstance(value, (list, tuple)):
+                for idx, sub_value in enumerate(value):
+                    ok, info = _finite_check(f"{name}[{idx}]", sub_value, max_entries=max_entries)
+                    if not ok:
+                        return False, info
+                return True, None
+            return True, None
+
+        def _sample_tensor(tensor: torch.Tensor, *, limit: int = 5) -> List[float]:
+            flat = tensor.detach().reshape(-1)
+            if flat.numel() == 0:
+                return []
+            limit = max(0, min(int(limit), flat.numel()))
+            return flat[:limit].cpu().tolist()
+
+        def _max_abs(name: str, value: Any) -> Union[float, Dict[str, Any], None]:
+            if isinstance(value, torch.Tensor):
+                if value.numel() == 0:
+                    return 0.0
+                data = value.detach().to(torch.float32)
+                return float(torch.max(torch.abs(data)).item())
+            if isinstance(value, Mapping):
+                return {key: _max_abs(f"{name}.{key}" if name else str(key), sub_value) for key, sub_value in value.items()}
+            if isinstance(value, (list, tuple)):
+                return {str(idx): _max_abs(f"{name}[{idx}]", sub_value) for idx, sub_value in enumerate(value)}
+            return None
+
         for _ in range(gradient_steps):
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)  # type: ignore[union-attr]
             if self.icm_enabled:
@@ -1404,12 +1459,54 @@ class SACWithICM(SAC):
                         td_error_means.append(float(torch.mean(stacked).item()))
 
                 critic_loss = 0.5 * sum(F.mse_loss(current_q, target_q_values) for current_q in current_q_values)
+                if not torch.isfinite(critic_loss):
+                    obs_isfinite, obs_issue = _finite_check("replay_data.observations", replay_data.observations)
+                    next_obs_isfinite, next_obs_issue = _finite_check(
+                        "replay_data.next_observations", replay_data.next_observations
+                    )
+                    discounts_isfinite: bool
+                    discounts_sample: Union[float, List[float]]
+                    if isinstance(discounts, torch.Tensor):
+                        discounts_isfinite = bool(torch.isfinite(discounts).all())
+                        discounts_sample = _sample_tensor(discounts)
+                    else:
+                        try:
+                            discounts_sample = float(discounts)
+                        except (TypeError, ValueError):
+                            discounts_sample = float(self.gamma)
+                        discounts_isfinite = bool(np.isfinite(discounts_sample))
+                    raise ValueError(
+                        "Critic loss became non-finite",
+                        {
+                            "critic_loss": critic_loss.detach().cpu(),
+                            "target_q_values_isfinite": bool(torch.isfinite(target_q_values).all()),
+                            "current_q_isfinite": [bool(torch.isfinite(q).all()) for q in current_q_values],
+                            "target_q_values_sample": _sample_tensor(target_q_values),
+                            "next_q_values_isfinite": bool(torch.isfinite(next_q_values).all()),
+                            "next_q_values_sample": _sample_tensor(next_q_values),
+                            "next_log_prob_isfinite": bool(torch.isfinite(next_log_prob).all()),
+                            "next_log_prob_sample": _sample_tensor(next_log_prob),
+                            "next_actions_isfinite": bool(torch.isfinite(next_actions).all()),
+                            "next_actions_sample": _sample_tensor(next_actions),
+                            "actor_log_prob_isfinite": bool(torch.isfinite(log_prob).all()),
+                            "actor_log_prob_sample": _sample_tensor(log_prob),
+                            "actions_pi_isfinite": bool(torch.isfinite(actions_pi).all()),
+                            "actions_pi_sample": _sample_tensor(actions_pi),
+                            "replay_rewards_isfinite": bool(torch.isfinite(replay_data.rewards).all()),
+                            "replay_rewards_sample": _sample_tensor(replay_data.rewards),
+                            "replay_dones_unique": torch.unique(replay_data.dones.detach()).cpu().tolist(),
+                            "discounts_isfinite": discounts_isfinite,
+                            "discounts_sample": discounts_sample,
+                            "replay_actions_isfinite": bool(torch.isfinite(replay_data.actions).all()),
+                            "replay_obs_isfinite": obs_isfinite,
+                            "replay_obs_issue": obs_issue,
+                            "replay_next_obs_isfinite": next_obs_isfinite,
+                            "replay_next_obs_issue": next_obs_issue,
+                            "replay_obs_max_abs": _max_abs("replay_data.observations", replay_data.observations),
+                            "replay_next_obs_max_abs": _max_abs("replay_data.next_observations", replay_data.next_observations),
+                        },
+                    )
                 critic_losses.append(float(critic_loss.item()))
-
-                q_values_pi = torch.cat(self.critic(replay_data.observations, actions_pi), dim=1)
-                min_qf_pi, _ = torch.min(q_values_pi, dim=1, keepdim=True)
-                actor_loss = (ent_coef * log_prob - min_qf_pi).mean()
-                actor_losses.append(float(actor_loss.item()))
 
             if ent_coef_loss is not None and self.ent_coef_optimizer is not None:
                 self.ent_coef_optimizer.zero_grad()
@@ -1423,17 +1520,52 @@ class SACWithICM(SAC):
             self.critic.optimizer.zero_grad()
             if use_amp:
                 scaler.scale(critic_loss).backward()
+                # CRITICAL FIX: Add gradient clipping to prevent NaN from exploding gradients
+                if scaler._enabled:
+                    scaler.unscale_(self.critic.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
                 scaler.step(self.critic.optimizer)
             else:
                 critic_loss.backward()
+                # CRITICAL FIX: Add gradient clipping to prevent NaN from exploding gradients
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
                 self.critic.optimizer.step()
+
+            q_values_pi = torch.cat(self.critic(replay_data.observations, actions_pi), dim=1)
+            min_qf_pi, _ = torch.min(q_values_pi, dim=1, keepdim=True)
+            actor_loss = (ent_coef * log_prob - min_qf_pi).mean()
+            if not torch.isfinite(actor_loss):
+                obs_isfinite, obs_issue = _finite_check("replay_data.observations", replay_data.observations)
+                next_obs_isfinite, next_obs_issue = _finite_check(
+                    "replay_data.next_observations", replay_data.next_observations
+                )
+                raise ValueError(
+                    "Actor loss became non-finite",
+                    {
+                        "actor_loss": actor_loss.detach().cpu(),
+                        "log_prob_isfinite": bool(torch.isfinite(log_prob).all()),
+                        "min_qf_pi_isfinite": bool(torch.isfinite(min_qf_pi).all()),
+                        "actions_pi_isfinite": bool(torch.isfinite(actions_pi).all()),
+                        "replay_obs_isfinite": obs_isfinite,
+                        "replay_obs_issue": obs_issue,
+                        "replay_next_obs_isfinite": next_obs_isfinite,
+                        "replay_next_obs_issue": next_obs_issue,
+                    },
+                )
+            actor_losses.append(float(actor_loss.item()))
 
             self.actor.optimizer.zero_grad()
             if use_amp:
                 scaler.scale(actor_loss).backward()
+                # CRITICAL FIX: Add gradient clipping to prevent NaN from exploding gradients
+                if scaler._enabled:
+                    scaler.unscale_(self.actor.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
                 scaler.step(self.actor.optimizer)
             else:
                 actor_loss.backward()
+                # CRITICAL FIX: Add gradient clipping to prevent NaN from exploding gradients
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
                 self.actor.optimizer.step()
 
             if use_amp:
@@ -1446,9 +1578,9 @@ class SACWithICM(SAC):
             self._n_updates += 1
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
-        self.logger.record("train/ent_coef", np.mean(ent_coefs))
-        self.logger.record("train/actor_loss", np.mean(actor_losses))
-        self.logger.record("train/critic_loss", np.mean(critic_losses))
+        self.logger.record("train/ent_coef", np.mean(ent_coefs) if ent_coefs else 0.0)
+        self.logger.record("train/actor_loss", np.mean(actor_losses) if actor_losses else 0.0)
+        self.logger.record("train/critic_loss", np.mean(critic_losses) if critic_losses else 0.0)
         if ent_coef_losses:
             self.logger.record("train/ent_coef_loss", np.mean(ent_coef_losses))
         if td_error_means:
@@ -1569,11 +1701,51 @@ class TradingSAC:
             sac_kwargs["icm_settings"] = icm_cfg
             sac_kwargs["ent_coef_lower_bound"] = sac_cfg.get("ent_coef_lower_bound", 0.0)
 
+        def _space_max_abs(space: spaces.Space) -> float:
+            if isinstance(space, spaces.Box):
+                candidates: List[float] = []
+                if np.isfinite(space.high).any():
+                    candidates.append(float(np.max(np.abs(space.high[np.isfinite(space.high)]))))
+                if np.isfinite(space.low).any():
+                    candidates.append(float(np.max(np.abs(space.low[np.isfinite(space.low)]))))
+                if not candidates:
+                    return float("inf")
+                return float(max(candidates))
+            if isinstance(space, spaces.Dict):
+                maxima = [
+                    _space_max_abs(sub_space)
+                    for sub_space in space.spaces.values()
+                ]
+                return float(max(maxima)) if maxima else 0.0
+            if isinstance(space, spaces.Tuple):
+                maxima = [_space_max_abs(sub_space) for sub_space in space.spaces]
+                return float(max(maxima)) if maxima else 0.0
+            return 0.0
+
         self.model = sac_class(**sac_kwargs)
 
         amp_requested = bool(sac_cfg.get("use_amp", True))
         amp_available = bool(torch.cuda.is_available() and str(self.device).startswith("cuda"))
-        setattr(self.model, "amp_enabled", amp_requested and amp_available)
+        amp_should_enable = amp_requested and amp_available
+        if amp_should_enable:
+            obs_space_max = _space_max_abs(env.observation_space)
+            if not math.isfinite(obs_space_max) or obs_space_max >= 60_000:
+                LOGGER.warning(
+                    "Disabling AMP: observation magnitude %.1f exceeds float16 safety threshold.",
+                    obs_space_max,
+                )
+                amp_should_enable = False
+        setattr(self.model, "amp_enabled", amp_should_enable)
+
+        anomaly_detection = bool(sac_cfg.get("enable_anomaly_detection", False))
+        setattr(self.model, "_anomaly_detection_enabled", anomaly_detection)
+        if anomaly_detection:
+            try:
+                if not torch.is_anomaly_enabled():
+                    torch.autograd.set_detect_anomaly(True)
+            except AttributeError:
+                torch.autograd.set_detect_anomaly(True)
+            LOGGER.warning("PyTorch autograd anomaly detection enabled; expect slower training.")
         
         # Apply paper's symmetric beta fix if optimizer_kwargs provided
         if optimizer_kwargs is not None:
@@ -1603,8 +1775,12 @@ class TradingSAC:
 
         compile_requested = bool(sac_cfg.get("compile_policy", False))
         have_triton = importlib_util.find_spec("triton") is not None
-        if torch.cuda.is_available() and hasattr(torch, "compile") and compile_requested:
-            if not have_triton:
+        if compile_requested:
+            if os.name == "nt":
+                LOGGER.warning("torch.compile requested but disabled on Windows due to stability issues.")
+            elif not torch.cuda.is_available() or not hasattr(torch, "compile"):
+                LOGGER.warning("torch.compile requested but CUDA compile support is unavailable; skipping.")
+            elif not have_triton:
                 LOGGER.warning("torch.compile requested but Triton is not installed; skipping compilation.")
             else:
                 try:

@@ -185,6 +185,7 @@ if __name__ == "__main__":
 import argparse
 import copy
 import logging
+import math
 import warnings
 from dataclasses import dataclass
 from collections import Counter, defaultdict, deque
@@ -473,6 +474,7 @@ class HierarchicalSACWrapper:
         self.num_envs = max(1, int(num_envs))
         self.action_shape = tuple(action_space_shape) or (1,)
         self.action_size = int(np.prod(self.action_shape))
+        self.options_amp_enabled = bool(options_config.get("use_amp", True))
 
         state_dim = int(options_config.get("state_dim", 512))
         num_options = int(options_config.get("num_options", 5))
@@ -497,6 +499,9 @@ class HierarchicalSACWrapper:
                 LOGGER.info("Options controller compiled with torch.compile for GPU acceleration")
             except Exception as e:
                 LOGGER.warning(f"Failed to compile options controller: {e}")
+
+        if not self.options_amp_enabled:
+            LOGGER.info("Options controller AMP disabled via configuration; using float32 precision.")
 
         self._configure_options()
         self.group_states: Dict[int, List[OptionEnvState]] = {}
@@ -1031,8 +1036,22 @@ class HierarchicalSACWrapper:
         option_indices = batch["option_indices"]
         option_returns = batch["option_returns"]
 
+        amp_enabled = self.options_amp_enabled and torch.cuda.is_available()
+        state_max = float(torch.max(torch.abs(states)).detach().item()) if states.numel() > 0 else 0.0
+        if not math.isfinite(state_max):
+            state_max = float("inf")
+        if amp_enabled and state_max >= 60_000:
+            LOGGER.warning(
+                "Options controller disabling AMP: state magnitude %.1f exceeds float16 safety threshold.",
+                state_max,
+            )
+            amp_enabled = False
+        if amp_enabled and not torch.isfinite(option_returns).all():
+            LOGGER.warning("Options controller disabling AMP due to non-finite returns in batch.")
+            amp_enabled = False
+
         # OPTIMIZATION 2: Single forward pass for both logits and values
-        with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):  # Mixed precision for 2x speedup
+        with torch.amp.autocast('cuda', enabled=amp_enabled):  # Mixed precision for 2x speedup
             option_logits, option_values = self.options_controller.forward(states)
 
             # Policy gradient loss (REINFORCE with baseline)
