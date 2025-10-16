@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 from collections import Counter
@@ -15,6 +16,7 @@ from stable_baselines3 import A2C, PPO, SAC
 
 from core.rl.curiosity.icm import ICMConfig, TradingICM
 from core.rl.environments.action_space_migrator import ActionSpaceMigrator
+from core.rl.policies import EncoderConfig, FeatureEncoder
 from training.rl.env_factory import build_trading_config, load_yaml
 from training.train_sac_continuous import TradingSAC, prepare_vec_env
 
@@ -191,26 +193,174 @@ def _resolve_policy_artifact(path: Path) -> Optional[Path]:
     fallback = sorted(path.parent.glob("*policy.pt")) if path.parent.exists() else []
     return fallback[0] if fallback else None
 
+def _build_shared_encoder(config: Dict[str, Any]) -> Optional[FeatureEncoder]:
+    settings = config.get("shared_encoder", {})
+    if not isinstance(settings, dict):
+        return None
+
+    if not bool(settings.get("enabled", True)):
+        return None
+
+    encoder_kwargs = settings.get("config", {})
+    if not isinstance(encoder_kwargs, dict):
+        encoder_kwargs = {}
+
+    try:
+        encoder_cfg = EncoderConfig(**encoder_kwargs)
+    except TypeError:
+        encoder_cfg = EncoderConfig()
+
+    encoder = FeatureEncoder(encoder_cfg)
+    
+    # Use CUDA if available
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    checkpoint = settings.get("checkpoint")
+    if checkpoint:
+        ckpt_path = Path(checkpoint)
+        if ckpt_path.exists():
+            try:
+                state_dict = torch.load(ckpt_path, map_location=device)
+                load_result = encoder.load_state_dict(state_dict, strict=False)
+                missing = getattr(load_result, "missing_keys", [])
+                unexpected = getattr(load_result, "unexpected_keys", [])
+                if missing or unexpected:
+                    print(
+                        json.dumps(
+                            {
+                                "shared_encoder_warning": {
+                                    "missing_keys": sorted(missing),
+                                    "unexpected_keys": sorted(unexpected),
+                                }
+                            }
+                        )
+                    )
+            except Exception as exc:  # noqa: BLE001
+                print(json.dumps({"shared_encoder_error": str(exc)}))
+
+    try:
+        encoder.to(torch.device(device))
+    except Exception:  # noqa: BLE001
+        pass
+    encoder.eval()
+    return encoder
+
+
+def _unwrap_compiled_module(module: Any) -> Any:
+    """Return the original module if torch.compile wrapped it."""
+    current = module
+    seen: set[int] = set()
+    while hasattr(current, "_orig_mod"):
+        ident = id(current)
+        if ident in seen:
+            break
+        seen.add(ident)
+        try:
+            current = getattr(current, "_orig_mod")
+        except AttributeError:
+            break
+    return current
+
+
+def _sanitize_compiled_policy(model: SAC) -> None:
+    """Swap out torch.compile wrappers so CPU inference works without a toolchain."""
+    policy = getattr(model, "policy", None)
+    if policy is None:
+        return
+
+    for attr in ("actor", "critic", "critic_target"):
+        module = getattr(policy, attr, None)
+        if module is None:
+            continue
+        unwrapped = _unwrap_compiled_module(module)
+        setattr(policy, attr, unwrapped)
+
+    if hasattr(model, "actor"):
+        model.actor = getattr(policy, "actor", model.actor)
+    if hasattr(model, "critic"):
+        model.critic = getattr(policy, "critic", model.critic)
+    if hasattr(model, "critic_target"):
+        model.critic_target = getattr(policy, "critic_target", model.critic_target)
+
 
 def _load_continuous_sac(config: Dict[str, Any], model_path: Path, seed: int) -> SAC:
+    # Use CUDA if available for faster inference
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
     if model_path.suffix == ".zip" and model_path.exists() and model_path.stat().st_size > 0:
-        model = SAC.load(str(model_path))
-        model.policy.set_training_mode(False)
-        return model
+        # Try direct load first (works if not compiled)
+        try:
+            model = SAC.load(str(model_path), device=device)
+            model.policy.set_training_mode(False)
+            return model
+        except RuntimeError as e:
+            # If loading fails due to _orig_mod, try fixing it
+            if "_orig_mod" in str(e):
+                # Need to load, clean, and re-save
+                import zipfile
+                import tempfile
+                
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir_path = Path(tmpdir)
+                    
+                    # Extract checkpoint
+                    with zipfile.ZipFile(model_path, 'r') as zip_ref:
+                        zip_ref.extractall(tmpdir_path)
+                    
+                    # Load policy state dict
+                    policy_path = tmpdir_path / "policy.pth"
+                    if policy_path.exists():
+                        policy_state = torch.load(policy_path, map_location=device)
+                        
+                        # Strip _orig_mod prefixes
+                        cleaned_policy = {}
+                        for key, value in policy_state.items():
+                            clean_key = key.replace("._orig_mod", "")
+                            cleaned_policy[clean_key] = value
+                        
+                        # Save cleaned policy
+                        torch.save(cleaned_policy, policy_path)
+                    
+                    # Re-zip
+                    clean_zip = tmpdir_path / "cleaned.zip"
+                    with zipfile.ZipFile(clean_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for file in tmpdir_path.rglob('*'):
+                            if file.is_file() and file != clean_zip:
+                                zipf.write(file, file.relative_to(tmpdir_path))
+                    
+                    # Load cleaned model
+                    model = SAC.load(str(clean_zip), device=device)
+                    model.policy.set_training_mode(False)
+                    return model
+            else:
+                raise
 
     policy_path = _resolve_policy_artifact(model_path)
     if policy_path is None or not policy_path.exists():
         raise FileNotFoundError(f"No usable policy checkpoint found alongside {model_path}")
 
-    env_cfg = config.get("environment", config)
+    inference_cfg: Dict[str, Any] = copy.deepcopy(config)
+    sac_settings = inference_cfg.setdefault("sac", {})
+    sac_settings["device"] = device
+    sac_settings["compile_policy"] = False
+    sac_settings["use_amp"] = False
+
+    env_cfg = inference_cfg.get("environment", inference_cfg)
     vec_env = prepare_vec_env(env_cfg, seed=seed, mode="continuous", num_envs=1)
-    trainer = TradingSAC(vec_env, vec_env, config)
+    shared_encoder = _build_shared_encoder(inference_cfg)
+    trainer = TradingSAC(vec_env, vec_env, inference_cfg, shared_encoder=shared_encoder)
     model = trainer.model
 
+    # Use CUDA if available
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch_device = torch.device(device)
+    
     try:
-        state_dict = torch.load(policy_path, map_location="cpu", weights_only=True)
+        state_dict = torch.load(policy_path, map_location=device, weights_only=True)
     except TypeError:
-        state_dict = torch.load(policy_path, map_location="cpu")
+        state_dict = torch.load(policy_path, map_location=device)
+
+    _sanitize_compiled_policy(model)
 
     load_info = model.policy.load_state_dict(state_dict, strict=False)
     missing = getattr(load_info, "missing_keys", [])
@@ -226,7 +376,26 @@ def _load_continuous_sac(config: Dict[str, Any], model_path: Path, seed: int) ->
                 }
             )
         )
-    model.policy.to(torch.device("cpu"))
+    try:
+        model.set_device(torch_device)
+    except Exception:  # noqa: BLE001
+        try:
+            model.device = torch_device
+        except Exception:  # noqa: BLE001
+            pass
+    model.policy.to(torch_device)
+    if hasattr(model.policy, "features_extractor"):
+        try:
+            model.policy.features_extractor.to(torch_device)
+        except Exception:  # noqa: BLE001
+            pass
+    for attr in ("actor", "critic", "critic_target"):
+        module = getattr(model, attr, None)
+        if module is not None:
+            try:
+                module.to(torch_device)
+            except Exception:  # noqa: BLE001
+                pass
     model.policy.set_training_mode(False)
     return model
 

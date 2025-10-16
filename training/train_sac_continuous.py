@@ -776,34 +776,58 @@ class ContinuousEvalCallback(BaseCallback):
         return True
 
     def _run_evaluation(self) -> Dict[str, float]:
+        """Run evaluation episodes, utilizing parallel environments if available.
+        
+        PERFORMANCE OPTIMIZATION: If eval_env has multiple parallel environments,
+        episodes run simultaneously with GPU batching and multiprocessing, reducing
+        evaluation time from minutes to seconds.
+        """
+        num_eval_envs = getattr(self.eval_env, 'num_envs', 1)
         episodes: List[Dict[str, Any]] = []
-        for _ in range(self.n_eval_episodes):
+        
+        # Calculate how many parallel batches we need
+        episodes_remaining = self.n_eval_episodes
+        
+        while episodes_remaining > 0:
+            # Run up to num_eval_envs episodes in parallel
+            batch_size = min(episodes_remaining, num_eval_envs)
+            
             obs = self.eval_env.reset()
-            episode_reward = 0.0
-            episode_length = 0
-            done = False
-            while not done:
+            episode_rewards = np.zeros(batch_size, dtype=np.float32)
+            episode_lengths = np.zeros(batch_size, dtype=np.int32)
+            active_envs = np.ones(batch_size, dtype=bool)
+            
+            # Run until all environments in this batch finish
+            while active_envs.any():
+                # Batched GPU inference for all active environments
                 action, _ = self.model.predict(obs, deterministic=self.deterministic)
                 obs, rewards, dones, infos = self.eval_env.step(action)
-                episode_reward += float(rewards[0])
-                episode_length += 1
-                done = bool(dones[0])
-                if done:
-                    info = infos[0] if infos else {}
-                    metrics = info.get("terminal_metrics", {})
-                    total_pnl = float(metrics.get("total_pnl", episode_reward))
-                    sharpe = float(metrics.get("sharpe_ratio", float("nan")))
-                    ret_pct = float(metrics.get("total_return_pct", float("nan")))
-                    episodes.append(
-                        {
-                            "episode_reward": total_pnl,
-                            "episode_length": episode_length,
-                            "sharpe_ratio": sharpe,
-                            "total_return_pct": ret_pct,
-                            "total_pnl": total_pnl,
-                        }
-                    )
-                    break
+                
+                # Update metrics for active environments
+                for env_idx in range(batch_size):
+                    if active_envs[env_idx]:
+                        episode_rewards[env_idx] += float(rewards[env_idx])
+                        episode_lengths[env_idx] += 1
+                        
+                        if bool(dones[env_idx]):
+                            # Episode finished - collect metrics
+                            active_envs[env_idx] = False
+                            info = infos[env_idx] if env_idx < len(infos) else {}
+                            metrics = info.get("terminal_metrics", {})
+                            total_pnl = float(metrics.get("total_pnl", episode_rewards[env_idx]))
+                            sharpe = float(metrics.get("sharpe_ratio", float("nan")))
+                            ret_pct = float(metrics.get("total_return_pct", float("nan")))
+                            
+                            episodes.append({
+                                "episode_reward": total_pnl,
+                                "episode_length": int(episode_lengths[env_idx]),
+                                "sharpe_ratio": sharpe,
+                                "total_return_pct": ret_pct,
+                                "total_pnl": total_pnl,
+                            })
+            
+            episodes_remaining -= batch_size
+        
         if not episodes:
             return {}
         def sm(key: str) -> float:
@@ -2073,10 +2097,22 @@ def main() -> None:
 
         num_envs = max(1, int(training_cfg.get("n_envs", 1)))
         env = prepare_vec_env(run_env_cfg, seed=seed + idx * 10, mode="continuous", num_envs=num_envs)
+        
+        # PERFORMANCE OPTIMIZATION: Match eval environments to training environments
+        # Running evaluation with the same number of parallel environments as training
+        # ensures consistent GPU utilization and maximizes throughput during evaluation
+        n_eval_episodes = int(training_cfg.get("n_eval_episodes", 5))
+        
+        # IMPORTANT: Set eval_num_envs = num_envs (match training environments)
+        # This allows all eval episodes to run in parallel batches efficiently
+        # Example: 16 training envs + 16 eval episodes = 1 parallel batch (fastest)
+        eval_num_envs = num_envs  # Always match training environment count
+        
         eval_env = prepare_vec_env(
             run_env_cfg,
             seed=seed + idx * 10 + 1,
             mode="continuous",
+            num_envs=eval_num_envs,  # Same as training for consistent performance
             is_eval=True,
         )
 

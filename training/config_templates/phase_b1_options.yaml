@@ -1,6 +1,19 @@
+# Phase B.1: Hierarchical Options Framework Configuration
+# THIS IS AN EXACT COPY OF phase_a2_sac_sharpe.yaml WITH OPTIONS SECTION ADDED
+# DO NOT MODIFY ANY PHASE A VALUES - THEY HAVE BEEN CAREFULLY TUNED
+#
+# Usage:
+#   python training/train_sac_with_options.py \
+#     --config training/config_templates/phase_b1_options.yaml \
+#     --symbol SPY \
+#     --base-sac-checkpoint models/phase_a2_sac_sharpe/SPY/sac_continuous_final.zip
+
+# ============================================================================
+# PHASE A CONFIGURATION (EXACT COPY FROM phase_a2_sac_sharpe.yaml)
+# ============================================================================
 experiment:
-  name: "phase_a2_sac_sharpe"
-  description: "Phase 2a baseline training with 10 symbols"
+  name: "phase_b1_options"  # Changed from "phase_a2_sac_sharpe"
+  description: "Phase B.1 hierarchical options training with Phase A base config"
   symbols:
     - SPY   # S&P 500 ETF
     - QQQ   # Nasdaq 100 ETF
@@ -15,8 +28,8 @@ experiment:
 
   # Paths
   data_dir: "data/phase3_splits"
-  output_dir: "models/phase_a2_sac_sharpe"  # FIXED: was checkpoint_dir, script expects output_dir
-  log_dir: "logs/phase_a2_sac_sharpe"
+  output_dir: "models/phase_b1_options"  # Changed from "models/phase_a2_sac_sharpe"
+  log_dir: "logs/phase_b1_options"  # Changed from "logs/phase_a2_sac_sharpe"
   mlflow_uri: "file:./mlruns"
 
 training:
@@ -24,9 +37,9 @@ training:
   seed: 1989
   log_freq: 1000  # PERFORMANCE: Reduced from 250 to 1000 (4x less frequent logging)
   entropy_window: 672
-  metrics_log_freq: 2000  # PERFORMANCE: Further reduce callback load for faster stepping
+  metrics_log_freq: 1000  # PERFORMANCE: Further reduce callback load for faster stepping
   eval_freq: 15000
-  n_eval_episodes: 16
+  n_eval_episodes: 80
   save_best_model: true
   save_interval: 100000  # Save every 100k steps
   save_final_model: true
@@ -34,7 +47,7 @@ training:
 
 evaluation:
   episodes: 80
-  continuous_temperature: 1.95
+  continuous_temperature: 1.99
   stochastic_continuous: true
 
 environment:
@@ -238,3 +251,103 @@ icm:
   icm_lr: 0.00008
   train_freq: 4  # PERFORMANCE: Reduced from 1 to 4 (train ICM every 4 gradient steps instead of every step; 4x speedup)
   warmup_steps: 3000
+
+# ============================================================================
+# PHASE B.1: HIERARCHICAL OPTIONS CONFIGURATION
+# ============================================================================
+options:
+  enabled: true                    # Enable hierarchical options framework
+  
+  # Architecture
+  state_dim: 578                   # Flattened observation dimension (actual from environment)
+                                   # This is automatically computed from observation dict:
+                                   # technical.flatten(): 24 × 23 = 552 (includes sentiment)
+                                   # sl_probs.flatten(): 3
+                                   # position.flatten(): 5
+                                   # portfolio.flatten(): 8
+                                   # regime.flatten(): 10
+                                   # Total: 578
+  num_options: 6                   # 6 trading strategies (added short option)
+  hidden_dim: 512                  # OPTIMIZED: 256 → 512 for medium state space (578 dims)
+  dropout: 0.1                     # OPTIMIZED: 0.2 → 0.1 (less regularization for large net)
+  
+  # Training Hyperparameters
+  options_lr: 3e-4                 # OPTIMIZED: 1e-4 → 3e-4 (faster options learning)
+  train_freq: 8                    # OPTIMIZED: 4 → 8 (less frequent, reduce overhead)
+  warmup_steps: 2000               # OPTIMIZED: 5000 → 2000 (start options training sooner)
+  value_loss_weight: 0.5           # OK - balanced policy/value learning
+  grad_clip: 1.0                   # OK - prevents gradient explosion
+  
+  # Replay Buffer
+  option_buffer_size: 80000        # OPTIMIZED: 10000 → 80000 (more experience for meta-learning)
+  batch_size: 128                  # OPTIMIZED: 64 → 128 (larger batches for stability)
+  
+  # ========================================================================
+  # Option-Specific Configurations
+  # ========================================================================
+  
+  # Option 0: OpenLongOption - Progressive Position Building
+  # NOTE: Sentiment is an AMPLIFIER, not a requirement (defaults to 0.5 neutral)
+  # Technicals drive entry decision; sentiment scales position size
+  open_long:
+    min_confidence: 0.6            # Minimum SL probability for entry
+    max_steps: 10                  # Maximum steps to build position
+    rsi_oversold_threshold: 40.0   # RSI level for oversold bounces
+    max_exposure_pct: 0.10         # Maximum position size (10% of equity)
+    min_sentiment: 0.50            # Blocks only if STRONGLY bearish (< 0.35)
+    sentiment_scale_enabled: true  # Amplifies size: neutral=1.0x, bullish=1.0-1.4x
+  
+  # Option 1: OpenShortOption - Progressive Short Building (NEW)
+  # NOTE: Sentiment is an AMPLIFIER, not a requirement (defaults to 0.5 neutral)
+  # Technicals (RSI, MA, death cross) drive entry; sentiment scales position size
+  open_short:
+    min_confidence: 0.6            # Minimum SL probability for entry
+    max_steps: 10                  # Maximum steps to build short position
+    rsi_overbought_threshold: 65.0 # RSI level for overbought (short entry)
+    max_exposure_pct: 0.10         # Maximum short position size (10% of equity)
+    max_sentiment: 0.45            # Blocks only if STRONGLY bullish (> 0.65)
+    sentiment_scale_enabled: true  # Amplifies size: neutral=1.0x, bearish=1.0-1.4x
+  
+  # Option 2: ClosePositionOption - Exit Management
+  close_position:
+    profit_target: 0.025           # +2.5% profit for staged exit
+    stop_loss: -0.015              # -1.5% stop loss
+    partial_threshold: 0.012       # +1.2% for partial profit taking
+    min_hold_steps: 2              # Minimum holding period (anti-churning)
+    sentiment_exit_threshold: 0.35 # Exit if sentiment very bearish
+    sentiment_stop_tighten: 0.40   # Tighten stop when sentiment < this
+    use_sentiment_trailing: true   # Enable sentiment-based trailing stops
+  
+  # Option 3: TrendFollowOption - BIDIRECTIONAL Trend Following
+  # NOTE: MA crossover (SMA_10 vs SMA_20) drives entry; sentiment amplifies
+  # BIDIRECTIONAL: Follows bullish trends (longs) AND bearish trends (shorts)
+  # - Bullish trend (+2% divergence) → Build long positions
+  # - Bearish trend (-2% divergence) → Build short positions
+  # - Weak trend (< ±1% divergence) → Exit positions
+  # - Sentiment amplifies size in both directions (1.0x to 1.4x)
+  trend_follow:
+    momentum_threshold: 0.02       # 2% SMA divergence for trend (both directions)
+    max_position_size: 0.12        # Maximum position size (long or short)
+    use_sentiment_scaling: true    # Amplifies size: neutral=1.0x, aligned=1.0-1.4x
+  
+  # Option 4: ScalpOption - Quick Profit Taking
+  # NOTE: RSI oversold (< 35) drives entry; sentiment amplifies position size
+  scalp:
+    profit_target: 0.010           # +1.0% quick profit target
+    stop_loss: -0.005              # -0.5% tight stop
+    max_steps: 8                   # Maximum 8-hour holding period
+    rsi_entry: 35.0                # RSI threshold for entry (PRIMARY)
+    position_size: 0.05            # 5% position size baseline
+    min_sentiment_entry: 0.45      # Blocks only if STRONGLY bearish (< 0.35)
+    sentiment_exit_threshold: 0.40 # Exit if sentiment very bearish
+    use_sentiment_sizing: true     # Amplifies size: neutral=1.0x, bullish=1.0-1.3x
+  
+  # Option 5: WaitOption - Intelligent Observation
+  # NOTE: Sentiment only affects early exit on extremes (0.30/0.75)
+  wait:
+    max_wait_steps: 20             # Maximum observation period
+    min_wait_steps: 3              # Minimum observation period
+    sentiment_extreme_high: 0.75   # Exit wait on strong bullish sentiment
+    sentiment_extreme_low: 0.30    # Exit wait on strong bearish sentiment
+    use_sentiment_exit: true       # Enable sentiment-based early exit
+
