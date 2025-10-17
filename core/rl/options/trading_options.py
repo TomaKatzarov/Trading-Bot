@@ -74,8 +74,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from enum import IntEnum
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -164,6 +165,80 @@ class TradingOption(ABC):
         self.entry_state = None
 
 
+# ============================================================================
+# Termination Helper Functions
+# ============================================================================
+
+
+def sigmoid_termination_prob(step: int, min_duration: int, max_steps: int, steepness: float = 0.5) -> float:
+    """Compute smooth sigmoid termination probability.
+    
+    Args:
+        step: Current step count
+        min_duration: Minimum steps before allowing termination (returns 0.0 before this)
+        max_steps: Maximum steps (returns 1.0 at this point)
+        steepness: Controls how quickly probability rises (higher = sharper transition)
+        
+    Returns:
+        Termination probability in [0, 1]
+        
+    Behavior:
+        - step < min_duration: prob = 0.0 (forced continuation)
+        - step in [min_duration, max_steps]: smooth sigmoid rise
+        - step >= max_steps: prob = 1.0 (forced termination)
+    """
+    if step < min_duration:
+        return 0.0
+    
+    if step >= max_steps:
+        return 1.0
+    
+    # Normalize to [0, 1] range
+    progress = (step - min_duration) / max(1, max_steps - min_duration)
+    
+    # Sigmoid: 1 / (1 + exp(-k * (x - 0.5)))
+    # Centers at 0.5 progress, with adjustable steepness
+    x = progress - 0.5
+    sigmoid = 1.0 / (1.0 + np.exp(-steepness * 10 * x))
+    
+    # Scale to [0.0, 0.8] to leave room for stochastic sampling
+    # (we don't want 100% termination until max_steps)
+    return sigmoid * 0.8
+
+
+def extract_position_features(
+    state: Optional[np.ndarray], observation_dict: Optional[Dict[str, np.ndarray]] = None
+) -> Tuple[float, float, float, float, float]:
+    """Return (flag, entry_price, pnl_pct, duration, size_pct) from obs/state.
+
+    Falls back to zeros when no position information is available or the arrays are
+    shorter than expected. Keeping this logic centralized ensures every option uses
+    the same convention regardless of how observations are flattened.
+    """
+
+    position_vec: Optional[np.ndarray] = None
+
+    if observation_dict is not None:
+        pos_val = observation_dict.get("position")
+        if pos_val is not None:
+            position_vec = np.asarray(pos_val, dtype=np.float32).ravel()
+
+    if position_vec is None and state is not None:
+        if isinstance(state, np.ndarray) and state.size >= 5:
+            position_vec = np.asarray(state[-5:], dtype=np.float32).ravel()
+
+    if position_vec is None:
+        return 0.0, 0.0, 0.0, 0.0, 0.0
+
+    if position_vec.size < 5:
+        padded = np.zeros(5, dtype=np.float32)
+        padded[: position_vec.size] = position_vec
+        position_vec = padded
+
+    flag, entry_price, pnl_pct, duration, size_pct = (float(position_vec[i]) for i in range(5))
+    return flag, entry_price, pnl_pct, duration, size_pct
+
+
 class OpenLongOption(TradingOption):
     """Option for opening long positions progressively.
 
@@ -219,12 +294,9 @@ class OpenLongOption(TradingOption):
         
         Sentiment amplifies decision but is NOT required (defaults to 0.5 neutral if missing).
         """
-        # Position size is in last 5 elements of state
-        # For dict obs: position[4] contains size_pct
-        if len(state) >= 5:
-            position_size = float(state[-5])  # Exposure percentage
-        else:
-            position_size = 0.0
+        # Position size comes from helper to avoid brittle indexing assumptions
+        _, _, _, _, position_size = extract_position_features(state, observation_dict)
+        position_size = abs(position_size)
 
         # Must have very small or no position to initiate
         if position_size >= 0.02:
@@ -326,27 +398,39 @@ class OpenLongOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate when position established or max steps reached."""
+        """Terminate when position established or max steps reached.
+        
+        IMPROVED TERMINATION LOGIC:
+        - Uses sigmoid curve for smooth termination (not instant)
+        - min_duration enforced by wrapper (centralized duration management)
+        - Success-based termination (achieved target exposure)
+        - Time-based fallback with smooth probability increase
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
             # Check current position size
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
+            position_size = abs(position_size)
 
-            # Terminate if:
-            # 1. Position size exceeds target
-            if position_size > self.max_exposure:
-                return 1.0
+            # TERMINATION CONDITION 1: Success - Position size exceeds target
+            if position_size >= self.max_exposure * 0.9:  # 90% of target
+                return 1.0  # Immediate termination on success
 
-            # 2. Max steps reached
+            # TERMINATION CONDITION 2: Max steps reached (forced termination)
             if step >= self.max_steps:
                 return 1.0
 
-            # 3. Gradual probability increase with steps
-            # Low chance early, higher chance later
-            prob = min(0.1 + (step / self.max_steps) * 0.3, 0.5)
+            # TERMINATION CONDITION 3: Smooth time-based termination
+            # Use sigmoid curve starting from step 0 (wrapper enforces min_duration)
+            prob = sigmoid_termination_prob(step, min_duration=0, max_steps=self.max_steps, steepness=0.4)
+            
             return prob
 
-        except (IndexError, ValueError):
-            return 1.0  # Terminate on error
+        except (IndexError, ValueError) as exc:
+            logger.warning("OpenLongOption termination fallback due to error: %s", exc)
+            return 0.5  # Neutral probability on error
 
     def reset(self) -> None:
         """Reset option state."""
@@ -427,12 +511,8 @@ class OpenShortOption(TradingOption):
         Sentiment amplifies decision but is NOT required (defaults to 0.5 neutral if missing).
         """
         # Check position size (must be very small or none)
-        if len(state) >= 5:
-            position_size = float(state[-5])  # Exposure percentage
-        else:
-            position_size = 0.0
-
-        if position_size >= 0.02:  # Already have meaningful position
+        _, _, _, _, position_size = extract_position_features(state, observation_dict)
+        if abs(position_size) >= 0.02:  # Already have meaningful position
             return False
 
         # Technical confirmation: look for reversal signals (PRIMARY DRIVER)
@@ -557,31 +637,44 @@ class OpenShortOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate when short position established or max steps reached."""
+        """Terminate when short position established or max steps reached.
+        
+        IMPROVED TERMINATION LOGIC:
+        - Sigmoid curve for smooth termination
+        - min_duration enforced by wrapper (centralized duration management)
+        - Success-based: achieved target short exposure
+        - Sentiment-based: exit if sentiment turns bullish
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
             # Check current position size (absolute value for shorts)
-            position_size = abs(float(state[-5])) if len(state) >= 5 else 0.0
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
+            position_size = abs(position_size)
 
-            # Terminate if:
-            # 1. Position size exceeds target
-            if position_size > self.max_exposure:
-                return 1.0
+            # TERMINATION CONDITION 1: Success - Short position size exceeds target
+            if position_size >= self.max_exposure * 0.9:  # 90% of target
+                return 1.0  # Immediate termination on success
 
-            # 2. Max steps reached
+            # TERMINATION CONDITION 2: Max steps reached
             if step >= self.max_steps:
                 return 1.0
 
-            # 3. Sentiment turned bullish - exit early
+            # TERMINATION CONDITION 3: Sentiment turned bullish - exit early
             sentiment = self._extract_sentiment(state, observation_dict)
-            if sentiment > 0.55:  # Turned bullish
-                return 0.9  # High probability to terminate
+            if sentiment > 0.60:  # Turned bullish (was 0.55, increase threshold)
+                return 0.8  # High probability to terminate (but not 100% to allow learning)
 
-            # 4. Gradual probability increase with steps
-            prob = min(0.1 + (step / self.max_steps) * 0.3, 0.5)
+            # TERMINATION CONDITION 4: Smooth time-based termination
+            # Use sigmoid starting from step 0 (wrapper enforces min_duration)
+            prob = sigmoid_termination_prob(step, min_duration=0, max_steps=self.max_steps, steepness=0.4)
+            
             return prob
 
-        except (IndexError, ValueError):
-            return 1.0  # Terminate on error
+        except (IndexError, ValueError) as exc:
+            logger.warning("OpenShortOption termination fallback due to error: %s", exc)
+            return 0.5
 
     def reset(self) -> None:
         """Reset option state."""
@@ -644,7 +737,7 @@ class ClosePositionOption(TradingOption):
         self.use_sentiment_trailing = use_sentiment_trailing
         self.staged_exit = False  # Track if partial exit occurred
 
-    def _extract_sentiment(self, observation_dict: dict[str, np.ndarray]) -> float:
+    def _extract_sentiment(self, observation_dict: Dict[str, np.ndarray]) -> float:
         """Extract sentiment score from observation.
 
         Args:
@@ -665,14 +758,8 @@ class ClosePositionOption(TradingOption):
     def initiation_set(self, state: np.ndarray, observation_dict: Optional[Dict[str, np.ndarray]] = None) -> bool:
         """Can initiate if has an open position."""
         try:
-            # Check if position is open
-            if observation_dict is not None and "position" in observation_dict:
-                is_open = bool(observation_dict["position"][0])
-                return is_open
-            
-            # Fallback: check position size
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
-            return abs(position_size) > 0.01
+            pos_flag, _, _, _, position_size = extract_position_features(state, observation_dict)
+            return (pos_flag > 0.5) or (abs(position_size) > 0.01)
 
         except (IndexError, ValueError):
             return False
@@ -684,14 +771,10 @@ class ClosePositionOption(TradingOption):
         """
         try:
             # Extract unrealized P&L and position info
-            if observation_dict is not None and "position" in observation_dict:
-                position = observation_dict["position"]
-                unrealized_pnl_pct = float(position[2])
-                holding_period = int(position[3])
-            else:
-                # Fallback extraction
-                unrealized_pnl_pct = float(state[-4]) if len(state) >= 4 else 0.0
-                holding_period = step
+            _, _, unrealized_pnl_pct, holding_period_raw, position_size = extract_position_features(
+                state, observation_dict
+            )
+            holding_period = int(holding_period_raw) if holding_period_raw is not None else step
 
             # Extract sentiment
             sentiment = self._extract_sentiment(observation_dict) if observation_dict else 0.5
@@ -760,19 +843,30 @@ class ClosePositionOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate when position is closed or exit executed."""
+        """Terminate when position is closed or exit executed.
+        
+        IMPROVED TERMINATION LOGIC:
+        - Success-based: position closed successfully
+        - min_duration enforced by wrapper (centralized duration management)
+        - Low probability to give up if position still open (needs time to close)
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
-            # Check if position still exists
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
-
+            # TERMINATION CONDITION 1: Position closed successfully
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
             if abs(position_size) < 0.01:
-                return 1.0  # Position closed, terminate
+                return 1.0  # Position closed, terminate immediately
 
-            # Low probability to give up control if stuck
-            return 0.05
+            # TERMINATION CONDITION 2: Low probability to give up if position still open
+            # ClosePosition needs multiple steps to execute properly
+            # Wrapper enforces min_duration, so we can return low probability safely
+            return 0.02  # Very low probability (was 0.05, reduce further)
 
-        except (IndexError, ValueError):
-            return 1.0
+        except (IndexError, ValueError) as exc:
+            logger.warning("ClosePositionOption termination fallback due to error: %s", exc)
+            return 0.5
 
     def reset(self) -> None:
         """Reset option state."""
@@ -831,7 +925,7 @@ class TrendFollowOption(TradingOption):
         self.use_sentiment_scaling = use_sentiment_scaling
         self.current_trend: Optional[str] = None  # Track 'bullish', 'bearish', or None
 
-    def _extract_sentiment(self, observation_dict: dict[str, np.ndarray]) -> float:
+    def _extract_sentiment(self, observation_dict: Dict[str, np.ndarray]) -> float:
         """Extract sentiment score from observation.
 
         Args:
@@ -915,7 +1009,7 @@ class TrendFollowOption(TradingOption):
                 sma_10 = float(state[6]) if len(state) > 6 else 0.0
                 sma_20 = float(state[7]) if len(state) > 7 else 0.0
 
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
 
             if sma_20 <= 0:
                 return 0.0
@@ -1020,9 +1114,18 @@ class TrendFollowOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate when trend weakens significantly."""
+        """Terminate when trend weakens significantly.
+        
+        IMPROVED TERMINATION LOGIC:
+        - Success-based: trend exhausted (< 50% of threshold)
+        - min_duration enforced by wrapper (centralized duration management)
+        - Smooth sigmoid termination for time-based fallback
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
-            # Check trend strength
+            # TERMINATION CONDITION 1: Check trend strength
             if observation_dict is not None and "technical" in observation_dict:
                 technical = observation_dict["technical"]
                 sma_10 = float(technical[-1, 6])
@@ -1036,15 +1139,21 @@ class TrendFollowOption(TradingOption):
 
             sma_diff_pct = abs(sma_10 - sma_20) / sma_20
 
-            # Terminate if trend < 50% of threshold (trend exhausted)
+            # Success: Terminate if trend < 50% of threshold (trend exhausted)
             if sma_diff_pct < self.momentum_threshold * 0.5:
-                return 0.80
+                return 0.85  # High probability (was 0.80)
 
-            # Low probability otherwise
-            return 0.10
+            # TERMINATION CONDITION 2: Smooth time-based fallback
+            # TrendFollow doesn't have explicit max_steps, use reasonable default
+            # Wrapper enforces min_duration, so start from step 0
+            max_steps = 50  # Assume reasonable max for trend following
+            prob = sigmoid_termination_prob(step, min_duration=0, max_steps=max_steps, steepness=0.3)
+            
+            return min(prob, 0.15)  # Cap at 15% for time-based (trend should control)
 
-        except (IndexError, ValueError, ZeroDivisionError):
-            return 1.0
+        except (IndexError, ValueError, ZeroDivisionError) as exc:
+            logger.warning("TrendFollowOption termination fallback due to error: %s", exc)
+            return 0.5
 
     def reset(self) -> None:
         """Reset option state."""
@@ -1110,7 +1219,7 @@ class ScalpOption(TradingOption):
         self.use_sentiment_sizing = use_sentiment_sizing
         self.entry_time: Optional[int] = None
 
-    def _extract_sentiment(self, observation_dict: dict[str, np.ndarray]) -> float:
+    def _extract_sentiment(self, observation_dict: Dict[str, np.ndarray]) -> float:
         """Extract sentiment score from observation.
 
         Args:
@@ -1132,8 +1241,8 @@ class ScalpOption(TradingOption):
         """Can initiate on oversold RSI with no position (technicals primary, sentiment amplifies)."""
         try:
             # Check no position
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
-            if position_size > 0.01:
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
+            if abs(position_size) > 0.01:
                 return False
 
             # Check RSI oversold (PRIMARY DRIVER)
@@ -1168,13 +1277,8 @@ class ScalpOption(TradingOption):
             sentiment = self._extract_sentiment(observation_dict) if observation_dict else 0.5
 
             # Get P&L if position exists
-            if observation_dict is not None and "position" in observation_dict:
-                position = observation_dict["position"]
-                is_open = bool(position[0])
-                unrealized_pnl_pct = float(position[2])
-            else:
-                is_open = (float(state[-5]) > 0.01) if len(state) >= 5 else False
-                unrealized_pnl_pct = float(state[-4]) if len(state) >= 4 else 0.0
+            pos_flag, _, unrealized_pnl_pct, _, position_size = extract_position_features(state, observation_dict)
+            is_open = (pos_flag > 0.5) or (abs(position_size) > 0.01)
 
             # If no position, enter with small size (scaled by sentiment AMPLIFIER)
             if not is_open and step == 0:
@@ -1223,23 +1327,35 @@ class ScalpOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate quickly after trade completes."""
+        """Terminate quickly after trade completes.
+        
+        IMPROVED TERMINATION LOGIC:
+        - Success-based: position closed (scalp completed)
+        - min_duration enforced by wrapper (centralized duration management)
+        - Smooth sigmoid for time-based termination
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
-            position_size = float(state[-5]) if len(state) >= 5 else 0.0
+            # TERMINATION CONDITION 1: Trade closed successfully
+            _, _, _, _, position_size = extract_position_features(state, observation_dict)
+            if abs(position_size) < 0.01:
+                return 1.0  # Immediate termination on trade completion
 
-            # Terminate if no position (trade closed)
-            if position_size < 0.01:
-                return 1.0
-
-            # Terminate if max steps reached
+            # TERMINATION CONDITION 2: Max steps reached (scalp timeout)
             if step >= self.max_steps:
                 return 1.0
 
-            # Gradual increase in termination probability
-            return min(0.1 + (step / self.max_steps) * 0.4, 0.6)
+            # TERMINATION CONDITION 3: Smooth sigmoid for time-based
+            # Wrapper enforces min_duration, so start from step 0
+            prob = sigmoid_termination_prob(step, min_duration=0, max_steps=self.max_steps, steepness=0.6)
+            
+            return prob
 
-        except (IndexError, ValueError):
-            return 1.0
+        except (IndexError, ValueError) as exc:
+            logger.warning("ScalpOption termination fallback due to error: %s", exc)
+            return 0.5
 
     def reset(self) -> None:
         """Reset option state."""
@@ -1301,7 +1417,7 @@ class WaitOption(TradingOption):
         """Hold and observe - no trading action."""
         return 0.0  # Always hold
 
-    def _extract_sentiment(self, observation_dict: dict[str, np.ndarray]) -> float:
+    def _extract_sentiment(self, observation_dict: Dict[str, np.ndarray]) -> float:
         """Extract sentiment score from observation.
 
         Args:
@@ -1322,38 +1438,43 @@ class WaitOption(TradingOption):
     def termination_probability(
         self, state: np.ndarray, step: int, observation_dict: Optional[Dict[str, np.ndarray]] = None
     ) -> float:
-        """Terminate when strong signals emerge, sentiment extremes, or max wait reached."""
+        """Terminate when strong signals emerge, sentiment extremes, or max wait reached.
+        
+        IMPROVED TERMINATION LOGIC:
+        - min_duration enforced by wrapper (centralized duration management)
+        - Success-based: strong signals or sentiment extremes
+        - Smooth sigmoid for time-based progression
+        
+        NOTE: min_duration is enforced by HierarchicalSACWrapper before calling this method.
+        Do NOT check min_duration here to avoid double-checking.
+        """
         try:
-            # Minimum wait period
-            if step < self.min_wait:
-                return 0.0
-
-            # Maximum wait period
+            # TERMINATION CONDITION 1: Maximum wait period
             if step >= self.max_wait:
                 return 1.0
 
-            # **NEW**: Check for sentiment extremes (strong signal to act)
+            # TERMINATION CONDITION 2: Sentiment extremes (strong signal to act)
             if self.use_sentiment_exit and observation_dict is not None:
                 sentiment = self._extract_sentiment(observation_dict)
                 
                 # Very bullish sentiment → opportunity to enter
                 if sentiment > self.sentiment_extreme_high:
                     logger.info("Wait: Exiting on strong bullish sentiment (%.2f)", sentiment)
-                    return 0.80
+                    return 0.85  # Increased from 0.80
                 
-                # Very bearish sentiment → opportunity to short or defensive positioning
+                # Very bearish sentiment → opportunity to short
                 if sentiment < self.sentiment_extreme_low:
                     logger.info("Wait: Exiting on strong bearish sentiment (%.2f)", sentiment)
-                    return 0.80
+                    return 0.85  # Increased from 0.80
 
-            # Check for strong signals that warrant action
+            # TERMINATION CONDITION 3: Strong technical signals
             if observation_dict is not None:
                 # Check SL probabilities for strong conviction
                 if "sl_probs" in observation_dict:
                     sl_probs = observation_dict["sl_probs"]
                     max_prob = float(np.max(sl_probs))
                     if max_prob > 0.75:  # Strong signal
-                        return 0.60
+                        return 0.65  # Increased from 0.60
 
                 # Check for strong trend
                 if "technical" in observation_dict:
@@ -1364,11 +1485,13 @@ class WaitOption(TradingOption):
                         if sma_20 > 0:
                             divergence = abs(sma_10 - sma_20) / sma_20
                             if divergence > 0.03:  # 3% divergence
-                                return 0.70
+                                return 0.75  # Increased from 0.70
 
-            # Gradual increase in termination probability
-            progress = (step - self.min_wait) / max(1, self.max_wait - self.min_wait)
-            return min(0.15 + progress * 0.35, 0.50)
+            # TERMINATION CONDITION 4: Smooth sigmoid for time-based
+            # Wrapper enforces min_duration, so start from step 0
+            prob = sigmoid_termination_prob(step, min_duration=0, max_steps=self.max_wait, steepness=0.5)
+            
+            return min(prob, 0.50)  # Cap at 50% for gradual termination
 
         except (IndexError, ValueError, ZeroDivisionError):
             return 0.20  # Default low probability
@@ -1449,7 +1572,8 @@ class OptionsController(nn.Module):
         # State tracking
         self.current_option: Optional[int] = None
         self.option_step: int = 0
-        self.option_history: list = []
+        self._history_maxlen = 10_000
+        self.option_history: deque[int] = deque(maxlen=self._history_maxlen)
 
         logger.info(
             "OptionsController initialized: state_dim=%d, num_options=%d, hidden_dim=%d",
@@ -1461,10 +1585,14 @@ class OptionsController(nn.Module):
     def select_option(
         self,
         state: torch.Tensor,
-        observation_dict: Optional[Dict[str, np.ndarray]] = None,
+        observation_dict: Optional[
+            Union[Dict[str, np.ndarray], Sequence[Optional[Dict[str, np.ndarray]]]]
+        ] = None,
         deterministic: bool = False,
         *,
-        options_override: Optional[list[TradingOption]] = None,
+        options_override: Optional[
+            Union[Sequence[TradingOption], Sequence[Sequence[TradingOption]]]
+        ] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Select which option to execute based on current state.
 
@@ -1486,59 +1614,99 @@ class OptionsController(nn.Module):
         option_logits = self.option_selector(state)
         option_values = self.option_value(state)
 
-        options = options_override if options_override is not None else self.options
+        state_np = state.detach().cpu().numpy()
 
-        # Check which options are available (initiation sets)
-        # For batched inputs, check initiation for first state in batch (all envs assumed similar for now)
-        state_np = state.detach().cpu().numpy()[0]
-        
-        available_mask = []
-        for option in options:
-            try:
-                can_init = option.initiation_set(state_np, observation_dict)
-                available_mask.append(can_init)
-            except Exception as e:
-                logger.warning("Error checking initiation set for %s: %s", option.name, e)
-                available_mask.append(False)
+        # Normalize observation dictionaries to per-sample list
+        if observation_dict is None:
+            obs_dicts: List[Optional[Dict[str, np.ndarray]]] = [None] * batch_size
+        elif isinstance(observation_dict, dict):
+            obs_dicts = [observation_dict] * batch_size
+        else:
+            obs_dicts = list(observation_dict)
+            if len(obs_dicts) != batch_size:
+                raise ValueError(
+                    "Observation dictionary batch size mismatch: "
+                    f"expected {batch_size}, got {len(obs_dicts)}"
+                )
 
-        available_mask = torch.tensor(available_mask, dtype=torch.bool, device=state.device)
+        # Normalize per-environment option overrides
+        if options_override is None:
+            options_per_env: List[Sequence[TradingOption]] = [self.options] * batch_size
+        else:
+            override_seq = list(options_override)
+            if not override_seq:
+                options_per_env = [self.options] * batch_size
+            elif isinstance(override_seq[0], TradingOption):
+                options_per_env = [override_seq] * batch_size
+            else:
+                if len(override_seq) != batch_size:
+                    raise ValueError(
+                        "options_override batch size mismatch: "
+                        f"expected {batch_size}, got {len(override_seq)}"
+                    )
+                options_per_env = [list(opts) for opts in override_seq]
 
-        # If no options available, default to WaitOption (last index)
-        if not available_mask.any():
-            logger.warning("No options available, defaulting to WaitOption")
-            wait_option_idx = len(options) - 1  # WaitOption is always last
-            available_mask[wait_option_idx] = True
+        num_options = option_logits.shape[1]
+        available_mask = torch.zeros((batch_size, num_options), dtype=torch.bool, device=state.device)
+        fallback_indices: List[int] = []
 
-        # Mask unavailable options - expand mask for batch
+        for sample_idx in range(batch_size):
+            options_for_env = options_per_env[sample_idx]
+            if len(options_for_env) != num_options:
+                logger.error(
+                    "Option count mismatch for sample %d: controller=%d, override=%d",
+                    sample_idx,
+                    num_options,
+                    len(options_for_env),
+                )
+                options_for_env = self.options
+            fallback_idx = max(0, len(options_for_env) - 1)
+            fallback_indices.append(fallback_idx)
+
+            obs_for_env = obs_dicts[sample_idx]
+            state_for_env = state_np[sample_idx]
+
+            for option_idx, option in enumerate(options_for_env):
+                try:
+                    can_init = option.initiation_set(state_for_env, obs_for_env)
+                except Exception as exc:
+                    logger.warning("Error checking initiation set for %s: %s", option.name, exc)
+                    can_init = False
+                available_mask[sample_idx, option_idx] = bool(can_init)
+
         masked_logits = option_logits.clone()
-        mask_expanded = ~available_mask.unsqueeze(0).expand(batch_size, -1)
-        masked_logits = masked_logits.masked_fill(mask_expanded, -float("inf"))
+        no_available = ~available_mask.any(dim=1)
+        if no_available.any():
+            for row_idx in torch.nonzero(no_available, as_tuple=False).view(-1).tolist():
+                fallback_idx = fallback_indices[row_idx]
+                available_mask[row_idx, fallback_idx] = True
+                masked_logits[row_idx] = -float("inf")
+                masked_logits[row_idx, fallback_idx] = 0.0
+                logger.warning("No options available for sample %d; defaulting to fallback index %d", row_idx, fallback_idx)
+
+        masked_logits = masked_logits.masked_fill(~available_mask, -float("inf"))
 
         # Select option for each batch element
         if deterministic:
-            option_indices = masked_logits.argmax(dim=-1)  # [batch_size]
+            option_indices = masked_logits.argmax(dim=-1)
         else:
-            # Sample from categorical distribution
             probs = torch.softmax(masked_logits, dim=-1)
-            # Handle any remaining -inf values
             probs = torch.where(torch.isfinite(probs), probs, torch.zeros_like(probs))
             probs_sum = probs.sum(dim=-1, keepdim=True)
             probs = probs / (probs_sum + 1e-8)
-            
-            # Ensure we have valid probabilities
-            valid_probs = (probs_sum.squeeze(-1) > 1e-6)
+
+            valid_probs = probs_sum.squeeze(-1) > 1e-6
             if not valid_probs.all():
-                logger.warning("Invalid probability distribution detected, using argmax")
+                logger.warning("Invalid probability distribution detected; using argmax fallback")
                 option_indices = masked_logits.argmax(dim=-1)
             else:
                 try:
-                    option_indices = torch.multinomial(probs, 1).squeeze(-1)  # [batch_size]
-                except RuntimeError as e:
-                    logger.warning("Multinomial sampling failed: %s, using argmax", e)
-                    option_indices = masked_logits.argmax(dim=-1)  # [batch_size]
+                    option_indices = torch.multinomial(probs, 1).squeeze(-1)
+                except RuntimeError as exc:
+                    logger.warning("Multinomial sampling failed (%s); using argmax", exc)
+                    option_indices = masked_logits.argmax(dim=-1)
 
         # Ensure indices are within valid range (safety check for CUDA)
-        num_options = len(options)
         option_indices = torch.clamp(option_indices, 0, num_options - 1)
 
         return option_indices, option_values
@@ -1564,21 +1732,25 @@ class OptionsController(nn.Module):
         # Validate option index first
         options = options_override if options_override is not None else self.options
 
+        fallback_reason: Optional[str] = None
         if option_idx < 0 or option_idx >= len(options):
-            logger.warning("Invalid option index %d, defaulting to WAIT", option_idx)
-            option_idx = 5  # WaitOption (now at index 5 with 6 total options)
-            info = {
-                "option_idx": option_idx,
-                "option_name": OptionType.WAIT.name,
-                "option_step": self.option_step,
-                "fallback": "invalid_index",
-            }
-        else:
-            info = {
-                "option_idx": option_idx,
-                "option_name": OptionType(option_idx).name,
-                "option_step": self.option_step,
-            }
+            fallback_idx = max(0, len(options) - 1)
+            logger.warning("Invalid option index %d, defaulting to index %d", option_idx, fallback_idx)
+            option_idx = fallback_idx
+            fallback_reason = "invalid_index"
+
+        try:
+            option_name = OptionType(option_idx).name
+        except ValueError:
+            option_name = getattr(options[option_idx], "name", f"OPTION_{option_idx}")
+
+        info = {
+            "option_idx": option_idx,
+            "option_name": option_name,
+            "option_step": self.option_step,
+        }
+        if fallback_reason is not None:
+            info["fallback"] = fallback_reason
 
         option = options[option_idx]
 
@@ -1619,9 +1791,15 @@ class OptionsController(nn.Module):
         return action, terminate, info
 
     def reset(self) -> None:
-        """Reset controller state (called on environment reset)."""
+        """Reset controller state (called on environment reset).
+        
+        CRITICAL FIX: Clear option_history to prevent memory accumulation across episodes.
+        Without this, the deque grows unbounded and option statistics become stale.
+        """
         self.current_option = None
         self.option_step = 0
+        # CRITICAL: Clear history to prevent memory leak
+        self.option_history.clear()
         for option in self.options:
             option.reset()
 

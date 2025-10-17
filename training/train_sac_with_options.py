@@ -335,22 +335,38 @@ class OptionReplayBuffer:
             option_steps: Number of steps option executed for
             episode_return: Total episode return so far
         """
+        state_array = np.asarray(state, dtype=np.float32).ravel()
+        if state_array.size == 0:
+            LOGGER.warning("OptionReplayBuffer received empty state; skipping transition")
+            return
+
+        if not np.all(np.isfinite(state_array)):
+            LOGGER.warning("OptionReplayBuffer received non-finite state values; skipping transition")
+            return
+
         # Initialize storage on first add (now we know state dimension)
         if self._states is None:
-            self._state_dim = state.shape[0]
+            self._state_dim = state_array.shape[0]
             # OPTIMIZATION: C-contiguous arrays for fast tensor conversion
-            self._states = np.zeros((self.capacity, self._state_dim), dtype=np.float32, order='C')
+            self._states = np.zeros((self.capacity, self._state_dim), dtype=np.float32, order="C")
             self._option_indices = np.zeros(self.capacity, dtype=np.int64)
             self._option_returns = np.zeros(self.capacity, dtype=np.float32)
             self._option_steps = np.zeros(self.capacity, dtype=np.float32)
             self._episode_returns = np.zeros(self.capacity, dtype=np.float32)
+        elif state_array.shape[0] != self._state_dim:
+            LOGGER.error(
+                "OptionReplayBuffer state dimension mismatch: expected %d, got %d",
+                self._state_dim,
+                state_array.shape[0],
+            )
+            return
         
         # OPTIMIZATION: Direct assignment (no copy, no object allocation)
-        self._states[self.position] = state
-        self._option_indices[self.position] = option_idx
-        self._option_returns[self.position] = option_return
-        self._option_steps[self.position] = option_steps
-        self._episode_returns[self.position] = episode_return
+        self._states[self.position] = state_array
+        self._option_indices[self.position] = int(option_idx)
+        self._option_returns[self.position] = float(option_return)
+        self._option_steps[self.position] = float(option_steps)
+        self._episode_returns[self.position] = float(episode_return)
         
         self.position = (self.position + 1) % self.capacity
         if self.position == 0:
@@ -370,6 +386,8 @@ class OptionReplayBuffer:
         """
         current_size = self.capacity if self.is_full else self.position
         if current_size < batch_size:
+            return None
+        if self._states is None:
             return None
 
         # OPTIMIZATION 3: Vectorized random sampling (faster than list indexing)
@@ -411,6 +429,16 @@ class OptionEnvState:
     option_start_return: float = 0.0
     episode_return: float = 0.0
     last_option_state: Optional[np.ndarray] = None
+    # NEW: Per-option configuration
+    action_scales: Dict[int, float] = None  # Action scale per option index
+    min_durations: Dict[int, int] = None  # Minimum duration per option index
+    
+    def __post_init__(self):
+        """Initialize default dicts after dataclass creation."""
+        if self.action_scales is None:
+            self.action_scales = {}
+        if self.min_durations is None:
+            self.min_durations = {}
 
     def reset_runtime(self) -> None:
         self.current_option_idx = None
@@ -504,7 +532,8 @@ class HierarchicalSACWrapper:
             LOGGER.info("Options controller AMP disabled via configuration; using float32 precision.")
 
         self._configure_options()
-        self.group_states: Dict[int, List[OptionEnvState]] = {}
+        self.wait_option_index: Optional[int] = self._resolve_wait_option_index()
+        self.env_states: List[OptionEnvState] = []
         self._ensure_group_capacity(self.num_envs)
 
         options_lr = float(options_config.get("options_lr", 1e-4))
@@ -524,6 +553,23 @@ class HierarchicalSACWrapper:
         # OPTIMIZATION: Pass device to buffer for direct GPU tensor creation
         self.option_buffer = OptionReplayBuffer(capacity=buffer_size, device=device)
         self.batch_size = int(options_config.get("batch_size", 64))
+
+        # NEW: Advantage normalization config
+        self.normalize_advantages = bool(options_config.get("normalize_advantages", True))
+        self.advantage_epsilon = float(options_config.get("advantage_epsilon", 1e-8))
+        
+        # NEW: Entropy bonus config
+        self.entropy_bonus = float(options_config.get("entropy_bonus", 0.01))
+        
+        # NEW: Temperature annealing config
+        self.temperature = max(float(options_config.get("temperature", 1.0)), 1e-4)
+        self.temperature_decay = float(options_config.get("temperature_decay", 0.9995))
+        self.min_temperature = max(float(options_config.get("min_temperature", 0.1)), 1e-4)
+        self.current_temperature = max(self.temperature, self.min_temperature)  # Track current temperature
+
+        # Evaluation overrides to keep deterministic rollouts from stalling on passive options
+        self.eval_min_action_scale = max(0.0, float(options_config.get("eval_min_action_scale", 0.05)))
+        self.eval_wait_value_tolerance = max(0.0, float(options_config.get("eval_wait_value_tolerance", 0.1)))
 
         self.option_usage_counts = Counter()
         self.option_durations: Dict[int, List[int]] = defaultdict(list)
@@ -545,25 +591,48 @@ class HierarchicalSACWrapper:
             num_options,
             hidden_dim,
         )
+        LOGGER.info(
+            "Advantage normalization: %s, Entropy bonus: %.4f, Temperature: %.2f→%.2f (decay=%.5f)",
+            self.normalize_advantages,
+            self.entropy_bonus,
+            self.temperature,
+            self.min_temperature,
+            self.temperature_decay,
+        )
 
     def _ensure_group_capacity(self, group_size: int) -> List[OptionEnvState]:
         if group_size <= 0:
             raise ValueError("group_size must be positive")
 
-        states = self.group_states.get(group_size)
-        if states is None:
-            states = [self._create_env_state() for _ in range(group_size)]
-            self.group_states[group_size] = states
-        elif len(states) < group_size:
-            states.extend(self._create_env_state() for _ in range(group_size - len(states)))
-        return states
+        if len(self.env_states) < group_size:
+            deficit = group_size - len(self.env_states)
+            self.env_states.extend(self._create_env_state() for _ in range(deficit))
+
+        return self.env_states[:group_size]
+
+    def _resolve_wait_option_index(self) -> Optional[int]:
+        """Identify the index of the passive Wait option if present."""
+
+        for idx, option in enumerate(self.options_controller.options):
+            name = getattr(option, "name", "").lower()
+            if name == "wait" or name.endswith("wait"):
+                return idx
+
+        if self.options_controller.options:
+            return len(self.options_controller.options) - 1
+        return None
 
     def _create_env_state(self) -> OptionEnvState:
         options_copy = copy.deepcopy(self.options_controller.options)
         for option in options_copy:
             if hasattr(option, "reset"):
                 option.reset()
-        return OptionEnvState(options=options_copy)
+        # NEW: Pass action_scales and min_durations to env state
+        return OptionEnvState(
+            options=options_copy,
+            action_scales=self.action_scales.copy(),
+            min_durations=self.min_durations.copy()
+        )
 
     def _configure_options(self) -> None:
         options = self.options_controller.options
@@ -571,11 +640,18 @@ class HierarchicalSACWrapper:
             LOGGER.warning("Options controller has no options registered; skipping configuration override")
             return
 
+        # NEW: Extract global action_scale and min_duration mappings
+        self.action_scales = {}
+        self.min_durations = {}
+
         open_long_cfg = self.options_config.get("open_long", {})
         options[0].min_confidence = float(open_long_cfg.get("min_confidence", 0.6))
         options[0].max_steps = int(open_long_cfg.get("max_steps", 10))
         if hasattr(options[0], "max_exposure"):
             options[0].max_exposure = float(open_long_cfg.get("max_exposure_pct", 0.10))
+        # NEW: Action scale and min duration for OpenLong
+        self.action_scales[0] = float(open_long_cfg.get("action_scale", 0.8))
+        self.min_durations[0] = int(open_long_cfg.get("min_duration", 5))
 
         if len(options) > 1:
             open_short_cfg = self.options_config.get("open_short", {})
@@ -583,31 +659,48 @@ class HierarchicalSACWrapper:
             options[1].max_steps = int(open_short_cfg.get("max_steps", 10))
             if hasattr(options[1], "max_exposure"):
                 options[1].max_exposure = float(open_short_cfg.get("max_exposure_pct", 0.10))
+            # NEW: Action scale and min duration for OpenShort
+            self.action_scales[1] = float(open_short_cfg.get("action_scale", 0.8))
+            self.min_durations[1] = int(open_short_cfg.get("min_duration", 5))
 
         if len(options) > 2:
             close_cfg = self.options_config.get("close_position", {})
             options[2].profit_target = float(close_cfg.get("profit_target", 0.025))
             options[2].stop_loss = float(close_cfg.get("stop_loss", -0.015))
             options[2].partial_threshold = float(close_cfg.get("partial_threshold", 0.012))
+            # NEW: Action scale and min duration for ClosePosition
+            self.action_scales[2] = float(close_cfg.get("action_scale", 1.0))
+            self.min_durations[2] = int(close_cfg.get("min_duration", 3))
 
         if len(options) > 3:
             trend_cfg = self.options_config.get("trend_follow", {})
             options[3].momentum_threshold = float(trend_cfg.get("momentum_threshold", 0.02))
             if hasattr(options[3], "max_position"):
                 options[3].max_position = float(trend_cfg.get("max_position_size", 0.12))
+            # NEW: Action scale and min duration for TrendFollow
+            self.action_scales[3] = float(trend_cfg.get("action_scale", 0.6))
+            self.min_durations[3] = int(trend_cfg.get("min_duration", 10))
 
         if len(options) > 4:
             scalp_cfg = self.options_config.get("scalp", {})
             options[4].profit_target = float(scalp_cfg.get("profit_target", 0.010))
             options[4].stop_loss = float(scalp_cfg.get("stop_loss", -0.005))
             options[4].max_steps = int(scalp_cfg.get("max_steps", 8))
+            # NEW: Action scale and min duration for Scalp
+            self.action_scales[4] = float(scalp_cfg.get("action_scale", 1.0))
+            self.min_durations[4] = int(scalp_cfg.get("min_duration", 5))
 
         wait_cfg = self.options_config.get("wait", {})
         wait_idx = len(options) - 1
         options[wait_idx].max_wait = int(wait_cfg.get("max_wait_steps", 20))
         options[wait_idx].min_wait = int(wait_cfg.get("min_wait_steps", 3))
+        # NEW: Action scale and min duration for Wait
+        self.action_scales[wait_idx] = float(wait_cfg.get("action_scale", 0.05))
+        self.min_durations[wait_idx] = int(wait_cfg.get("min_duration", 5))
 
         LOGGER.info("Options configured with custom hyperparameters from YAML")
+        LOGGER.info(f"Action scales: {self.action_scales}")
+        LOGGER.info(f"Minimum durations: {self.min_durations}")
 
     # ------------------------------------------------------------------
     # Environment lifecycle helpers
@@ -730,8 +823,26 @@ class HierarchicalSACWrapper:
             state = states[env_idx]
             option_idx = state.current_option_idx
             
-            # Use SAC-generated action (low-level control)
-            actions[env_idx] = self._format_action(sac_actions[env_idx])
+            # ACTION SCALING: Modulate SAC actions based on current option's strategy
+            # This allows options to control trading aggressiveness without bypassing SAC policy.
+            # 
+            # Design rationale:
+            # - OpenLong/Short (0.8): Moderate entry sizing for position building
+            # - ClosePosition (1.0): Full actions for decisive exits
+            # - TrendFollow (0.6): Patient sizing for trend confirmation
+            # - Scalp (1.0): Full speed for quick trades
+            # - Wait (0.0): Zero actions = HOLD (no trading during observation)
+            # 
+            # Note: WaitOption uses action_scale=0.0 intentionally. During wait periods,
+            # the agent should NOT trade at all. This means SAC policy doesn't receive
+            # gradient signals during wait, but this is acceptable since wait is a
+            # passive strategy. The policy still learns from active trading options.
+            action_scale = state.action_scales.get(option_idx, 1.0) if option_idx is not None else 1.0
+            if deterministic and option_idx is not None and self.wait_option_index is not None:
+                if option_idx == self.wait_option_index:
+                    action_scale = max(action_scale, self.eval_min_action_scale)
+            scaled_action = sac_actions[env_idx] * action_scale
+            actions[env_idx] = self._format_action(scaled_action)
             
             new_option_selected = env_idx in envs_needing_options
             
@@ -744,10 +855,17 @@ class HierarchicalSACWrapper:
                 self.options_controller.option_step = state.option_step_count
                 self.options_controller.current_option = option_idx
                 
-                option = state.options[option_idx] if option_idx < len(state.options) else None
-                if option is not None:
-                    term_prob = option.termination_probability(state_flat, state.option_step_count, obs_dict)
-                    terminated = np.random.random() < term_prob
+                # FIX #2: Enforce minimum duration before allowing termination
+                min_duration = state.min_durations.get(option_idx, 0)
+                if state.option_step_count < min_duration:
+                    # Force option to continue (no termination allowed)
+                    terminated = False
+                else:
+                    # Check termination probability only after min_duration
+                    option = state.options[option_idx] if option_idx < len(state.options) else None
+                    if option is not None:
+                        term_prob = option.termination_probability(state_flat, state.option_step_count, obs_dict)
+                        terminated = np.random.random() < term_prob
                 
                 state.option_step_count += 1
 
@@ -762,6 +880,8 @@ class HierarchicalSACWrapper:
                         "option_step": state.option_step_count,
                         "option_selected": new_option_selected,
                         "option_terminated": bool(terminated),
+                        "action_scale": float(action_scale),  # NEW: Track action scale
+                        "min_duration": state.min_durations.get(option_idx, 0) if option_idx is not None else 0,  # NEW: Track min duration
                     }
                 )
 
@@ -803,25 +923,94 @@ class HierarchicalSACWrapper:
         
         # OPTIMIZATION: Batch tensor creation (single GPU transfer)
         states_tensor = torch.from_numpy(np.array(states_flat, dtype=np.float32)).to(self.device, non_blocking=True)
-        
-        # OPTIMIZATION: Single forward pass for all environments
-        all_option_indices, all_option_values = self.options_controller.select_option(
+        states = self._ensure_group_capacity(group_size)
+
+        obs_override = [per_env_obs[idx] for idx in env_indices]
+        options_override = [states[idx].options for idx in env_indices]
+
+        # OPTIMIZATION: Single forward pass for all environments with per-env options
+        option_indices_tensor, option_values_tensor = self.options_controller.select_option(
             states_tensor,
-            observation_dict=None,  # Batched mode doesn't need individual dicts
+            observation_dict=obs_override,
             deterministic=deterministic,
-            options_override=None,  # Will use default options for batch
+            options_override=options_override,
         )
         
-        # Convert to CPU for state updates (minimize sync points)
-        if isinstance(all_option_indices, torch.Tensor):
-            all_option_indices = all_option_indices.cpu().numpy()
-        if not isinstance(all_option_indices, (list, np.ndarray)):
-            all_option_indices = [all_option_indices] * len(env_indices)
-        
+        # Convert tensors to numpy for downstream processing
+        if isinstance(option_indices_tensor, torch.Tensor):
+            option_indices_np = option_indices_tensor.detach().cpu().numpy()
+        elif isinstance(option_indices_tensor, np.ndarray):
+            option_indices_np = option_indices_tensor.copy()
+        else:
+            option_indices_np = np.asarray(option_indices_tensor, dtype=np.int64)
+
+        if isinstance(option_values_tensor, torch.Tensor):
+            option_values_np = option_values_tensor.detach().cpu().numpy()
+        elif isinstance(option_values_tensor, np.ndarray):
+            option_values_np = option_values_tensor
+        else:
+            option_values_np = np.asarray(option_values_tensor, dtype=np.float32)
+
+        if option_indices_np.ndim == 0:
+            option_indices_np = np.full(len(env_indices), int(option_indices_np))
+        if option_values_np.ndim == 1:
+            option_values_np = option_values_np.reshape(len(env_indices), -1)
+
+        eval_override_applied = False
+        if deterministic and self.wait_option_index is not None and len(env_indices) > 0:
+            for i, env_idx in enumerate(env_indices):
+                options_for_env = options_override[i]
+                wait_idx = self.wait_option_index
+                if wait_idx >= len(options_for_env):
+                    wait_idx = len(options_for_env) - 1
+                if wait_idx < 0:
+                    continue
+                if wait_idx >= option_values_np.shape[1]:
+                    wait_idx = option_values_np.shape[1] - 1
+                    if wait_idx < 0:
+                        continue
+
+                current_idx = int(option_indices_np[i])
+                if current_idx != wait_idx:
+                    continue
+
+                obs_dict = obs_override[i]
+                state_flat = states_flat[i]
+
+                available_indices: List[int] = []
+                for candidate_idx, option in enumerate(options_for_env):
+                    try:
+                        can_init = option.initiation_set(state_flat, obs_dict)
+                    except Exception as exc:  # noqa: BLE001
+                        LOGGER.debug("Option initiation check failed for %s: %s", getattr(option, "name", candidate_idx), exc)
+                        can_init = False
+                    if can_init:
+                        available_indices.append(candidate_idx)
+
+                alternative_indices = [idx for idx in available_indices if idx != wait_idx and idx < option_values_np.shape[1]]
+                if not alternative_indices:
+                    continue
+
+                wait_value = option_values_np[i, wait_idx] if option_values_np.size else float("nan")
+                best_alt = max(alternative_indices, key=lambda idx: option_values_np[i, idx])
+                best_value = option_values_np[i, best_alt]
+
+                if not np.isfinite(best_value):
+                    continue
+
+                tolerance = self.eval_wait_value_tolerance
+                if np.isfinite(wait_value) and best_value < wait_value - tolerance:
+                    continue
+
+                option_indices_np[i] = best_alt
+                eval_override_applied = True
+
+        if eval_override_applied:
+            LOGGER.debug("Deterministic override: replaced Wait option with active alternative during evaluation.")
+
         # Update environment states
-        states = self._ensure_group_capacity(group_size)
         for i, env_idx in enumerate(env_indices):
-            option_idx = int(all_option_indices[i])
+            option_idx = int(option_indices_np[i])
             state = states[env_idx]
             
             state.current_option_idx = option_idx
@@ -902,7 +1091,13 @@ class HierarchicalSACWrapper:
 
         state = states[env_idx]
         # Extract scalar from batch (batch_size=1)
-        option_idx = option_indices.item() if option_indices.dim() > 0 else int(option_indices)
+        if isinstance(option_indices, torch.Tensor):
+            option_indices_flat = option_indices.reshape(-1)
+            if option_indices_flat.numel() == 0:
+                raise RuntimeError("Options controller returned empty index tensor")
+            option_idx = int(option_indices_flat[0].item())
+        else:
+            option_idx = int(option_indices)
         state.current_option_idx = option_idx
         state.option_step_count = 0
         state.option_start_return = state.episode_return
@@ -937,13 +1132,14 @@ class HierarchicalSACWrapper:
         # Extract and flatten each component (use .ravel() for C-contiguous, faster than .flatten())
         technical = obs_dict.get("technical", np.array([], dtype=np.float32)).ravel()
         sl_probs = obs_dict.get("sl_probs", np.array([], dtype=np.float32)).ravel()
-        position = obs_dict.get("position", np.array([], dtype=np.float32)).ravel()
         portfolio = obs_dict.get("portfolio", np.array([], dtype=np.float32)).ravel()
         regime = obs_dict.get("regime", np.array([], dtype=np.float32)).ravel()
-        
+        position = obs_dict.get("position", np.array([], dtype=np.float32)).ravel()
+
         # OPTIMIZATION: Single concatenate call (faster than multiple)
-        # Ensure float32 dtype for consistency (avoids type conversion later)
-        state_flat = np.concatenate([technical, sl_probs, position, portfolio, regime])
+        # NOTE: Position features MUST remain at the end so option logic can read state[-5:]
+        components = [technical, sl_probs, portfolio, regime, position]
+        state_flat = np.concatenate(components) if components else np.array([], dtype=np.float32)
         return state_flat.astype(np.float32, copy=False)  # copy=False for in-place conversion
 
     def _finalize_option_for_env(self, env_idx: int, *, force: bool = False) -> None:
@@ -1009,6 +1205,8 @@ class HierarchicalSACWrapper:
         - Policy loss: -log_prob(option) * advantage
         - Value loss: MSE between predicted and actual option returns
         - Advantage: actual_return - predicted_value (variance reduction)
+        - Entropy bonus: Encourage option diversity
+        - Temperature annealing: High exploration early, focused later
 
         Returns:
             Dictionary with training metrics, or None if buffer insufficient
@@ -1018,6 +1216,11 @@ class HierarchicalSACWrapper:
         2. Fused optimizer step (20% faster on CUDA)
         3. In-place tensor operations (reduce memory allocations)
         4. Cached gradient computation (minimize overhead)
+        
+        CRITICAL STABILITY FIXES:
+        1. Advantage normalization: Prevents gradient explosion
+        2. Entropy bonus: Prevents option collapse
+        3. Temperature annealing: Balances exploration vs exploitation
         """
         # Check warmup and training frequency
         if self.total_steps < self.warmup_steps:
@@ -1054,8 +1257,15 @@ class HierarchicalSACWrapper:
         with torch.amp.autocast('cuda', enabled=amp_enabled):  # Mixed precision for 2x speedup
             option_logits, option_values = self.options_controller.forward(states)
 
+            # NEW: Apply temperature scaling for exploration
+            # Ensure temperature is at least min_temperature, and never below safety threshold
+            safe_temperature = max(self.current_temperature, self.min_temperature)
+            if safe_temperature < 1e-4:
+                safe_temperature = 1e-4  # Safety floor to prevent division by zero
+            scaled_logits = option_logits / safe_temperature
+            
             # Policy gradient loss (REINFORCE with baseline)
-            log_probs = torch.log_softmax(option_logits, dim=-1)
+            log_probs = torch.log_softmax(scaled_logits, dim=-1)
             selected_log_probs = log_probs.gather(1, option_indices.unsqueeze(-1)).squeeze(-1)
 
             # Advantage = actual return - predicted value (baseline for variance reduction)
@@ -1064,26 +1274,44 @@ class HierarchicalSACWrapper:
             # OPTIMIZATION 3: In-place detach for memory efficiency
             advantages = option_returns - predicted_values.detach()
 
+            # CRITICAL FIX: Normalize advantages for stable gradients
+            if self.normalize_advantages and advantages.numel() > 1:
+                advantages = advantages - advantages.mean()
+                adv_std = advantages.std(unbiased=False)
+                if torch.isfinite(adv_std) and adv_std > self.advantage_epsilon:
+                    advantages = advantages / (adv_std + self.advantage_epsilon)
+
             policy_loss = -(selected_log_probs * advantages).mean()
 
             # Value function loss (TD learning)
             value_loss = nn.functional.mse_loss(predicted_values, option_returns)
+            
+            # CRITICAL FIX: Add entropy bonus to encourage option diversity
+            probs = torch.softmax(scaled_logits, dim=-1)
+            entropy = -(probs * log_probs).sum(dim=-1).mean()
+            entropy_bonus_loss = -self.entropy_bonus * entropy  # Negative because we want to maximize entropy
 
             # Combined loss
-            total_loss = policy_loss + self.value_loss_weight * value_loss
+            total_loss = policy_loss + self.value_loss_weight * value_loss + entropy_bonus_loss
 
         # OPTIMIZATION 4: Efficient gradient computation and clipping
         self.options_optimizer.zero_grad(set_to_none=True)  # set_to_none=True for faster zeroing
         total_loss.backward()
         
         # OPTIMIZATION 5: Fused gradient clipping (single kernel call)
-        torch.nn.utils.clip_grad_norm_(
+        grad_norm = torch.nn.utils.clip_grad_norm_(
             self.options_controller.parameters(), 
             self.grad_clip,
             error_if_nonfinite=False  # Gracefully handle NaN/Inf
         )
         
         self.options_optimizer.step()
+        
+        # CRITICAL FIX: Anneal temperature for exploration→exploitation transition
+        self.current_temperature = max(
+            self.min_temperature,
+            self.current_temperature * self.temperature_decay
+        )
 
         # OPTIMIZATION 6: Compute metrics with minimal synchronization
         with torch.no_grad():
@@ -1095,11 +1323,15 @@ class HierarchicalSACWrapper:
         metrics = {
             "options/policy_loss": policy_loss.item(),
             "options/value_loss": value_loss.item(),
+            "options/entropy": entropy.item(),
+            "options/entropy_bonus_loss": entropy_bonus_loss.item(),
             "options/total_loss": total_loss.item(),
             "options/mean_advantage": mean_advantage,
             "options/advantage_std": advantage_std,
             "options/mean_return": mean_return,
             "options/value_error": value_error,
+            "options/grad_norm": grad_norm.item() if isinstance(grad_norm, torch.Tensor) else float(grad_norm),
+            "options/temperature": self.current_temperature,
             "options/buffer_size": len(self.option_buffer),
         }
 
@@ -1169,7 +1401,7 @@ class HierarchicalSACWrapper:
                 "returns": {k: v for k, v in self.option_returns.items()},
             },
             "controller_state": {
-                "option_history": self.options_controller.option_history,
+                "option_history": list(self.options_controller.option_history),
                 "current_option": self.options_controller.current_option,
                 "option_step": self.options_controller.option_step,
             },
@@ -1201,12 +1433,21 @@ class HierarchicalSACWrapper:
 
         # Restore controller's internal state
         controller_state = checkpoint.get("controller_state", {})
-        self.options_controller.option_history = controller_state.get("option_history", [])
+        history = controller_state.get("option_history", [])
+        self.options_controller.option_history.clear()
+        if isinstance(history, deque):
+            history_iter = list(history)
+        elif isinstance(history, (list, tuple)):
+            history_iter = list(history)
+        else:
+            history_iter = []
+        if history_iter:
+            self.options_controller.option_history.extend(history_iter)
         self.options_controller.current_option = controller_state.get("current_option", None)
         self.options_controller.option_step = controller_state.get("option_step", 0)
-        self.group_states.clear()
+        self.env_states.clear()
         self._ensure_group_capacity(self.num_envs)
-        for state in self.group_states[self.num_envs]:
+        for state in self.env_states:
             state.reset_runtime()
 
         LOGGER.info("Options controller loaded from %s", checkpoint_path)
@@ -1222,23 +1463,38 @@ class OptionsMonitorCallback(BaseCallback):
     
     PERFORMANCE OPTIMIZATION: Reduced logging frequency and batched metrics collection
     to minimize I/O and synchronization overhead during training.
+    
+    CRITICAL DIAGNOSTICS:
+    - Detects option collapse (when only 1-2 options are used)
+    - Tracks termination probabilities
+    - Monitors option Q-values
+    - Alerts when min_duration is preventing proper learning
     """
 
     def __init__(
         self,
         hierarchical_wrapper: HierarchicalSACWrapper,
         log_freq: int = 1000,
+        collapse_threshold: float = 0.50,  # Alert if >50% usage on single option (was 0.70)
     ):
         """Initialize options monitor callback.
 
         Args:
             hierarchical_wrapper: Hierarchical SAC wrapper to monitor
             log_freq: Logging frequency (steps)
+            collapse_threshold: Usage percentage that triggers collapse alert.
+                With 6 options, uniform distribution = 16.7% per option.
+                Threshold of 50% detects collapse while reducing false positives.
         """
         super().__init__()
         self.wrapper = hierarchical_wrapper
         self.log_freq = log_freq
+        self.collapse_threshold = collapse_threshold
         self.last_log_step = 0
+        self.collapse_detected = False
+        
+        # NEW: Minimum number of active options (5% usage threshold)
+        self.min_active_options = 3  # At least 3 options should be used
         
         # OPTIMIZATION: Cache metrics to avoid repeated dictionary allocations
         self._metrics_cache: Dict[str, float] = {}
@@ -1253,20 +1509,71 @@ class OptionsMonitorCallback(BaseCallback):
             # OPTIMIZATION: Single statistics call (avoid repeated dictionary operations)
             stats = self.wrapper.get_option_statistics()
 
+            # CRITICAL: Detect option collapse (improved with dual criteria)
+            usage_pct = stats.get("usage_percentages", {})
+            if usage_pct:
+                max_usage = max(usage_pct.values())
+                num_used_options = sum(1 for pct in usage_pct.values() if pct > 0.05)  # Options with >5% usage
+                
+                # Collapse detected if EITHER condition is true:
+                # 1. Single option dominates (>40% usage)
+                # 2. Too few options active (< 3 out of 6)
+                collapse_detected_now = (
+                    max_usage > self.collapse_threshold or 
+                    num_used_options < self.min_active_options
+                )
+                
+                if collapse_detected_now and not self.collapse_detected:
+                    LOGGER.warning(
+                        "⚠️  OPTION COLLAPSE DETECTED!\n"
+                        "  Max usage: %.1f%% (threshold: %.1f%%)\n"
+                        "  Active options: %d/%d (min: %d)\n"
+                        "Consider:\n"
+                        "  1. Increasing entropy_bonus (current: %.4f)\n"
+                        "  2. Increasing temperature (current: %.2f)\n"
+                        "  3. Reducing min_duration constraints\n"
+                        "  4. Checking option initiation sets are not too restrictive",
+                        max_usage * 100,
+                        self.collapse_threshold * 100,
+                        num_used_options,
+                        self.wrapper.options_config.get("num_options", 6),
+                        self.min_active_options,
+                        self.wrapper.entropy_bonus,
+                        self.wrapper.current_temperature,
+                    )
+                    self.collapse_detected = True
+                elif not collapse_detected_now and self.collapse_detected:
+                    LOGGER.info(
+                        "✓ Option diversity recovered! Max usage: %.1f%%, Active options: %d/%d",
+                        max_usage * 100,
+                        num_used_options,
+                        self.wrapper.options_config.get("num_options", 6),
+                    )
+                    self.collapse_detected = False
+
             # Log to tensorboard/console (batched operations)
             if self.logger is not None:
                 # OPTIMIZATION: Batch log all metrics at once
                 metrics_to_log = {}
                 
                 # Option usage distribution
-                usage_pct = stats.get("usage_percentages", {})
                 for option_name, pct in usage_pct.items():
                     metrics_to_log[f"options/usage_{option_name}"] = pct
 
-                # Option durations
+                # Option durations (CRITICAL: Detect if options are terminating instantly)
                 avg_durations = stats.get("average_durations", {})
                 for option_idx, duration in avg_durations.items():
                     metrics_to_log[f"options/avg_duration_{option_idx}"] = duration
+                    # CRITICAL: Alert if duration is too short (indicates min_duration not working)
+                    min_duration = self.wrapper.min_durations.get(option_idx, 0)
+                    if duration > 0 and duration < min_duration * 0.5:
+                        LOGGER.warning(
+                            "⚠️  Option %d has avg duration %.1f (min_duration: %d). "
+                            "Options terminating too early!",
+                            option_idx,
+                            duration,
+                            min_duration,
+                        )
 
                 # Option returns
                 avg_returns = stats.get("average_returns", {})
@@ -1276,6 +1583,9 @@ class OptionsMonitorCallback(BaseCallback):
                 # Overall statistics
                 metrics_to_log["options/total_selections"] = stats.get("total_selections", 0)
                 metrics_to_log["options/buffer_size"] = len(self.wrapper.option_buffer)
+                metrics_to_log["options/num_used_options"] = num_used_options if usage_pct else 0
+                metrics_to_log["options/max_usage_pct"] = max(usage_pct.values()) if usage_pct else 0.0
+                metrics_to_log["options/temperature"] = self.wrapper.current_temperature
                 
                 # OPTIMIZATION: Single batch record (more efficient than individual records)
                 for key, value in metrics_to_log.items():
@@ -1515,6 +1825,7 @@ def main() -> None:
     # Parse configuration (same as train_sac_continuous)
     env_cfg = config.setdefault("environment", {})
     training_cfg = config.setdefault("training", {})
+    evaluation_cfg = config.setdefault("evaluation", {})
     experiment_cfg = config.get("experiment", {})
     sac_cfg = config.setdefault("sac", {})
     
@@ -1542,6 +1853,12 @@ def main() -> None:
     if args.seed is not None:
         training_cfg["seed"] = int(args.seed)
     
+    if "episodes" in evaluation_cfg and "n_eval_episodes" not in training_cfg:
+        try:
+            training_cfg["n_eval_episodes"] = int(evaluation_cfg.get("episodes", 0))
+        except (TypeError, ValueError):
+            pass
+
     total_timesteps = int(training_cfg.get("total_timesteps", 100_000))
     seed = int(training_cfg.get("seed", 42))
     set_random_seed(seed)
@@ -1603,7 +1920,31 @@ def main() -> None:
         # Create environments (exactly the same)
         num_envs = max(1, int(training_cfg.get("n_envs", 1)))
         env = prepare_vec_env(run_env_cfg, seed=seed + idx * 10, mode="continuous", num_envs=num_envs)
-        eval_env = prepare_vec_env(run_env_cfg, seed=seed + idx * 10 + 1, mode="continuous", num_envs=1, is_eval=True)
+
+        # Match evaluation parallelism to training by default, with optional config override
+        eval_num_envs = evaluation_cfg.get("parallel_envs") or evaluation_cfg.get("n_envs") or evaluation_cfg.get("num_envs")
+        try:
+            eval_num_envs = int(eval_num_envs) if eval_num_envs is not None else None
+        except (TypeError, ValueError):
+            eval_num_envs = None
+
+        if not eval_num_envs or eval_num_envs <= 0:
+            eval_num_envs = getattr(env, "num_envs", num_envs)
+
+        eval_num_envs = max(1, min(int(eval_num_envs), getattr(env, "num_envs", num_envs)))
+
+        if eval_num_envs != getattr(env, "num_envs", num_envs):
+            LOGGER.info("Using %d parallel environments for evaluation (training uses %d)", eval_num_envs, getattr(env, "num_envs", num_envs))
+        else:
+            LOGGER.info("Evaluation parallel environments matched to training count: %d", eval_num_envs)
+
+        eval_env = prepare_vec_env(
+            run_env_cfg,
+            seed=seed + idx * 10 + 1,
+            mode="continuous",
+            num_envs=eval_num_envs,
+            is_eval=True,
+        )
         
         # Create base SAC model (or load from checkpoint)
         base_sac = None
@@ -1642,6 +1983,11 @@ def main() -> None:
         monitor = RichTrainingMonitor(sym, total_timesteps, console=console)
         monitor.metrics["run_label"] = run_label
         
+        reward_breakdown_logging = bool(training_cfg.get("log_reward_breakdown", False)) or bool(
+            getattr(args, "log_reward_breakdown", False)
+        )
+        reward_breakdown_log_freq = int(training_cfg.get("reward_breakdown_log_freq", 256))
+
         # Standard callbacks (all reused)
         callbacks = [
             ContinuousActionMonitor(log_freq=training_cfg.get("log_freq", 100)),
@@ -1650,6 +1996,9 @@ def main() -> None:
             SACMetricsCapture(),
             RichStatusCallback(monitor, total_timesteps=total_timesteps),
         ]
+
+        if reward_breakdown_logging:
+            callbacks.append(RewardBreakdownLogger(log_freq=reward_breakdown_log_freq))
         
         # Add options-specific callbacks
         callbacks.extend([

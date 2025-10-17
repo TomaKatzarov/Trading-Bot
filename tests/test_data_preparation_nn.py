@@ -661,8 +661,8 @@ class TestNNDataPreparer(unittest.TestCase):
         # Should have fewer rows due to insufficient future data for some rows
         self.assertLessEqual(len(result_df), len(test_data))
         
-        # Check that labels are integers
-        self.assertTrue(result_df['label'].dtype == int)
+        # Check that labels use an integer-compatible dtype
+        self.assertTrue(pd.api.types.is_integer_dtype(result_df['label'].dtype))
 
 
 class TestNNDataPreparerIntegration(unittest.TestCase):

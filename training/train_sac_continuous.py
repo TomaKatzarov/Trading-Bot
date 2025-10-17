@@ -729,6 +729,12 @@ class RichStatusCallback(BaseCallback):
         reward_mean = float(np.mean(ep_rewards)) if ep_rewards else float("nan")
         reward_std = float(np.std(ep_rewards)) if ep_rewards else float("nan")
 
+        if self.logger is not None:
+            if np.isfinite(reward_mean):
+                self.logger.record("train/reward_mean", reward_mean)
+            if np.isfinite(reward_std):
+                self.logger.record("train/reward_std", reward_std)
+
         self.monitor.update(
             step=self.num_timesteps,
             metrics={
@@ -766,15 +772,22 @@ class ContinuousEvalCallback(BaseCallback):
         self.best_sharpe: float = float("-inf")
         self._saved_best = False
         self._best_artifact_path: Optional[Path] = None
+        self._next_eval_step: int = self.eval_freq
 
     def _on_step(self) -> bool:
-        if self.num_timesteps % self.eval_freq != 0:
+        if self.num_timesteps < self._next_eval_step:
             return True
-        try:
-            summary = self._run_evaluation()
-            self._process_evaluation_summary(summary, step=self.num_timesteps)
-        except Exception as exc:  # noqa: BLE001
-            LOGGER.warning("Evaluation step failed: %s", exc)
+
+        freq = max(1, self.eval_freq)
+        # Run evaluations until caught up with current timestep
+        while self.num_timesteps >= self._next_eval_step:
+            try:
+                summary = self._run_evaluation()
+                self._process_evaluation_summary(summary, step=self.num_timesteps)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Evaluation step failed: %s", exc)
+            finally:
+                self._next_eval_step += freq
         return True
 
     def _run_evaluation(self) -> Dict[str, float]:
